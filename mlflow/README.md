@@ -150,13 +150,14 @@ end-to-end over plain HTTP, against the same experiment as the SDK walkthrough.
 Three HTTP surfaces it exercises (every call uses the standard
 `Authorization: Bearer <token>` header):
 
-- **`POST /api/2.0/otel/v1/traces`** — push traces via OTLP/HTTP. Both JSON and
-  protobuf shown. Requires `X-Databricks-UC-Table-Name`. Traces land in the same
-  UC Delta tables the MLflow UI reads, so they show up alongside SDK traces.
+- **`POST /api/2.0/otel/v1/traces`** — push traces via OTLP/HTTP+protobuf
+  (Databricks rejects OTLP/JSON today). Requires `X-Databricks-UC-Table-Name`.
+  Traces land in the same UC Delta tables the MLflow UI reads, so they show up
+  alongside SDK traces.
   Docs: [Store traces in UC](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog).
 - **`GET /api/2.0/mlflow/unity-catalog/prompts/{name}/versions/by-alias/{alias}`**
-  — load a prompt template by alias. Path-style; the `{name}` segment is the
-  three-tier UC name and must be URL-encoded. From
+  — load a prompt template by alias (Beta surface). Path-style; the `{name}`
+  segment is the three-tier UC name and must be URL-encoded. From
   [`UnityCatalogPromptService`](https://github.com/mlflow/mlflow/blob/master/mlflow/protos/unity_catalog_prompt_service.proto).
 - **`POST /api/2.0/mlflow/traces/delete-traces`** — `DeleteTracesV3` for cleanup.
   Docs: [`MlflowExperimentTrace`](https://docs.databricks.com/api/workspace/mlflowexperimenttrace/starttracev3).
