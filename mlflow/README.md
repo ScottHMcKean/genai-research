@@ -159,8 +159,12 @@ Three HTTP surfaces it exercises (every call uses the standard
   — load a prompt template by alias (Beta surface). Path-style; the `{name}`
   segment is the three-tier UC name and must be URL-encoded. From
   [`UnityCatalogPromptService`](https://github.com/mlflow/mlflow/blob/master/mlflow/protos/unity_catalog_prompt_service.proto).
-- **`POST /api/2.0/mlflow/traces/delete-traces`** — `DeleteTracesV3` for cleanup.
-  Docs: [`MlflowExperimentTrace`](https://docs.databricks.com/api/workspace/mlflowexperimenttrace/starttracev3).
+- **`DELETE FROM <prefix>_otel_*`** — UC trace tables are Delta tables; cleanup
+  is plain SQL. `DeleteTracesV3` exists at
+  `POST /api/2.0/mlflow/traces/delete-traces` but only operates on the legacy
+  trace store, not UC tables. From a non-Python service use the
+  [SQL Statement Execution API](https://docs.databricks.com/api/workspace/statementexecution)
+  pointed at a SQL warehouse.
 
 Step 1 binds the experiment to a UC trace location with one Python SDK call;
 that's the only SDK code in the notebook and it's a one-time admin step. Every
