@@ -1,7 +1,7 @@
 # MLflow 3 GenAI evaluation walkthrough (arXiv research agent).
 #
 # Deploy:  databricks bundle deploy -t dev
-# Run:     databricks bundle run -t dev mlflow_walkthrough_job
+# Run:     databricks bundle run -t dev mlflow_job
 #
 # Single serverless notebook task. Notebook does its own %pip install, so no
 # environment_key is required. Notebook assumes UC catalog `shm` with schema `genai`
@@ -9,11 +9,20 @@
 
 resources:
   jobs:
-    mlflow_walkthrough_job:
+    mlflow_job:
       name: "[MLflow Walkthrough] arXiv agent end-to-end eval"
       max_concurrent_runs: 1
       tasks:
         - task_key: arxiv_eval_walkthrough
           notebook_task:
-            notebook_path: ../mlflow_walkthrough/arxiv_eval_walkthrough.ipynb
+            notebook_path: ../mlflow/arxiv_eval_walkthrough.ipynb
           timeout_seconds: 1500
+
+    mlflow_rest_job:
+      name: "[MLflow Walkthrough] REST API tracing + prompt loading"
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: rest_api_walkthrough
+          notebook_task:
+            notebook_path: ../mlflow/rest_api_walkthrough.ipynb
+          timeout_seconds: 600

@@ -101,6 +101,10 @@ Docs: [Production monitoring](https://docs.databricks.com/aws/en/mlflow3/genai/e
 
 - [`arxiv_eval_walkthrough.ipynb`](arxiv_eval_walkthrough.ipynb) — the notebook,
   run top to bottom
+- [`rest_api_walkthrough.ipynb`](rest_api_walkthrough.ipynb) — companion notebook
+  for non-Python frameworks; same experiment, same Prompt Registry, but every
+  call is a plain HTTP `requests` call that ports directly to C# `HttpClient`,
+  Java `OkHttp`, Go `net/http`, etc.
 - [`arxiv_tools.py`](arxiv_tools.py) — `search_arxiv` and `fetch_arxiv_paper`;
   both wrapped as LangChain tools and decorated with
   `@mlflow.trace(span_type=SpanType.TOOL, ...)`
@@ -108,7 +112,7 @@ Docs: [Production monitoring](https://docs.databricks.com/aws/en/mlflow3/genai/e
   `run_turn` session helper
 - [`eval_questions.py`](eval_questions.py) — eight seed research questions with
   expected arXiv IDs and facts
-- [`../resources/mlflow_walkthrough_job.yml`](../resources/mlflow_walkthrough_job.yml)
+- [`../resources/mlflow_job.yml`](../resources/mlflow_job.yml)
   — Databricks Asset Bundle job definition
 
 ## Prerequisites
@@ -132,8 +136,35 @@ Docs: [Production monitoring](https://docs.databricks.com/aws/en/mlflow3/genai/e
 ### As a scheduled job
 ```bash
 databricks bundle deploy -t dev
-databricks bundle run -t dev mlflow_walkthrough_job
+databricks bundle run -t dev mlflow_job
 ```
+
+## REST API walkthrough (non-Python frameworks)
+
+The Python SDK story above is the recommended path when you control the
+runtime. When you don't — your agent runs in C#, Java, Go, Node — you still
+want traces in the MLflow Traces UI and prompts loaded from the UC Prompt
+Registry. [`rest_api_walkthrough.ipynb`](rest_api_walkthrough.ipynb) shows that
+end-to-end over plain HTTP, against the same experiment as the SDK walkthrough.
+
+Three HTTP surfaces it exercises (every call uses the standard
+`Authorization: Bearer <token>` header):
+
+- **`POST /api/2.0/otel/v1/traces`** — push traces via OTLP/HTTP. Both JSON and
+  protobuf shown. Requires `X-Databricks-UC-Table-Name`. Traces land in the same
+  UC Delta tables the MLflow UI reads, so they show up alongside SDK traces.
+  Docs: [Store traces in UC](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog).
+- **`GET /api/2.0/mlflow/unity-catalog/prompts/{name}/versions/by-alias/{alias}`**
+  — load a prompt template by alias. Path-style; the `{name}` segment is the
+  three-tier UC name and must be URL-encoded. From
+  [`UnityCatalogPromptService`](https://github.com/mlflow/mlflow/blob/master/mlflow/protos/unity_catalog_prompt_service.proto).
+- **`POST /api/2.0/mlflow/traces/delete-traces`** — `DeleteTracesV3` for cleanup.
+  Docs: [`MlflowExperimentTrace`](https://docs.databricks.com/api/workspace/mlflowexperimenttrace/starttracev3).
+
+Step 1 binds the experiment to a UC trace location with one Python SDK call;
+that's the only SDK code in the notebook and it's a one-time admin step. Every
+other step is `requests`-only and structured for direct port to any HTTP
+client. Run `arxiv_eval_walkthrough.ipynb` first so the prompt + alias exist.
 
 ## What to look for in the UI
 

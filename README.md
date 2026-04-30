@@ -43,15 +43,19 @@ Index of notebooks by topic. Most run on [Databricks Serverless](https://docs.da
 ### Evaluation & MLflow
 | Notebook |
 |----------|
-| [mlflow_walkthrough/arxiv_eval_walkthrough.ipynb](mlflow_walkthrough/arxiv_eval_walkthrough.ipynb) |
+| [mlflow/arxiv_eval_walkthrough.ipynb](mlflow/arxiv_eval_walkthrough.ipynb) |
+| [mlflow/rest_api_walkthrough.ipynb](mlflow/rest_api_walkthrough.ipynb) |
 | [evaluation/mlflow_genai_evaluation.ipynb](evaluation/mlflow_genai_evaluation.ipynb) |
 
-End-to-end MLflow 3 GenAI evaluation walkthrough (`mlflow_walkthrough/`): a LangGraph
+End-to-end MLflow 3 GenAI evaluation walkthrough (`mlflow/`): a LangGraph
 ReAct agent over the public arXiv API that exercises all eight stages of the
 Databricks MLflow UI flow — Trace, Sessions, Judges, Evaluation Datasets, Evaluation
 Runs, Labeling Schemas, Labeling Sessions, and Prompts / Agent Versioning. See
-`mlflow_walkthrough/README.md` and `mlflow_walkthrough/EMAIL.md` for the opinionated
-writeup.
+`mlflow/README.md` for the opinionated writeup. The companion
+`rest_api_walkthrough.ipynb` is a REST-only version of the same flow for
+non-Python frameworks (C#, Java, Go) — every call is `requests`-based, ports
+directly to `HttpClient`/`OkHttp`/`net/http`, and OTLP traces it emits show up
+in the same MLflow Traces UI as SDK-emitted ones.
 
 ### FastAPI
 | Notebook |
