@@ -12,6 +12,7 @@ time is fine, but avoid tight loops.
 
 from __future__ import annotations
 
+import time
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -21,7 +22,24 @@ import mlflow
 from langchain_core.tools import tool
 from mlflow.entities import SpanType
 
-ARXIV_API = "http://export.arxiv.org/api/query"
+# https direct so urllib doesn't have to follow a 302 from the http endpoint;
+# the redirected hop has been observed to time out under load.
+ARXIV_API = "https://export.arxiv.org/api/query"
+_TIMEOUT_S = 60
+_MAX_ATTEMPTS = 3
+
+
+def _fetch(url: str) -> bytes:
+    """GET `url` with bounded retries on transient timeouts / URL errors."""
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(url, timeout=_TIMEOUT_S) as r:
+                return r.read()
+        except (TimeoutError, urllib.error.URLError) as e:
+            last_exc = e
+            time.sleep(2 * (attempt + 1))  # 2s, 4s
+    raise last_exc  # type: ignore[misc]
 
 
 def _parse_entry(entry: Any) -> dict[str, Any]:
@@ -59,8 +77,7 @@ def search_arxiv(query: str, max_results: int = 5) -> list[dict[str, Any]]:
         "sortBy": "relevance",
     }
     url = f"{ARXIV_API}?{urllib.parse.urlencode(params)}"
-    with urllib.request.urlopen(url, timeout=20) as r:
-        feed = feedparser.parse(r.read())
+    feed = feedparser.parse(_fetch(url))
     return [_parse_entry(e) for e in feed.entries]
 
 
@@ -77,8 +94,7 @@ def fetch_arxiv_paper(arxiv_id: str) -> dict[str, Any]:
     """
     params = {"id_list": arxiv_id}
     url = f"{ARXIV_API}?{urllib.parse.urlencode(params)}"
-    with urllib.request.urlopen(url, timeout=20) as r:
-        feed = feedparser.parse(r.read())
+    feed = feedparser.parse(_fetch(url))
     if not feed.entries:
         return {"error": "not found", "arxiv_id": arxiv_id}
     return _parse_entry(feed.entries[0])
