@@ -57,6 +57,18 @@ non-Python frameworks (C#, Java, Go) — every call is `requests`-based, ports
 directly to `HttpClient`/`OkHttp`/`net/http`, and OTLP traces it emits show up
 in the same MLflow Traces UI as SDK-emitted ones.
 
+### Guardrails (prompt-injection / jailbreak testing)
+| Notebook |
+|----------|
+| [guardrails/guardrail_evaluation.ipynb](guardrails/guardrail_evaluation.ipynb) |
+
+Operationalizes guardrail evaluation across many datasets, two ways: **online**
+(Mosaic AI Gateway guardrails on the endpoint) and **offline** (an LLM-as-judge
+prompt scored with MLflow 3 GenAI eval). Tracks precision / recall / **false-positive
+rate**, breaks failures down by attack technique, and demonstrates the obfuscation
+bypass (spaced-out / base64 inputs) plus the normalization fix. See
+`guardrails/README.md` for the 3-min writeup.
+
 ### FastAPI
 | Notebook |
 |----------|
