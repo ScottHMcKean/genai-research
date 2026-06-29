@@ -65,9 +65,9 @@ in the same MLflow Traces UI as SDK-emitted ones.
 Operationalizes guardrail evaluation across many datasets, two ways: **online**
 (Mosaic AI Gateway guardrails on the endpoint) and **offline** (an LLM-as-judge
 prompt scored with MLflow 3 GenAI eval). Tracks precision / recall / **false-positive
-rate**, breaks failures down by attack technique, and demonstrates the obfuscation
-bypass (spaced-out / base64 inputs) plus the normalization fix. See
-`guardrails/README.md` for the 3-min writeup.
+rate**, breaks failures down by attack technique, demonstrates the obfuscation
+bypass (spaced-out / base64 inputs) plus the normalization fix, and aligns the judge
+with DSPy + GEPA. The notebook is self-contained — full writeup is in the intro cells.
 
 ### FastAPI
 | Notebook |
