@@ -21,7 +21,7 @@ extracted_fields ──► extracted_flat (one column per field + confidence)
 MLflow experiment: field accuracy, coverage recall, LLM judge, traces
 ```
 
-- **Runs on serverless, environment v5**, `%uv` for installs.
+- **Runs on serverless, environment v5**, `%pip` for installs.
 - `ai_extract` works on **already-parsed text** (it can't read PDF bytes) — so
   `ai_parse_document` runs first and we materialize its output. (`ai_extract` /
   `ai_parse_document` / `ai_classify` use Databricks-managed models; only `ai_query` lets
