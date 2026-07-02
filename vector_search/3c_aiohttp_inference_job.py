@@ -43,7 +43,7 @@ INITIAL_CONCURRENCY = int(dbutils.widgets.get("initial_concurrency"))
 TOP_K               = int(dbutils.widgets.get("top_k"))
 BATCH_SIZE          = int(dbutils.widgets.get("batch_size"))
 INFERENCE_MONTH     = dbutils.widgets.get("inference_month")
-SOURCE_TABLE        = INDEX_NAME.removesuffix("_index")
+SOURCE_TABLE        = "kasthuri_thambipillai.th.pre_vectorized_table_test"
 
 assert OUTPUT_TABLE, "output_table widget must be set before running"
 
@@ -131,18 +131,14 @@ async def query_one(session, sem, row_id, vec, url, headers, counters):
                         return row_id, [], latency_ms
 
                     data = await resp.json()
-                    result = data.get("result", {})
-                    cols = result.get("column_names", [])
-                    rows = result.get("data_array", [])
-                    score_key = "score" if "score" in cols else (cols[-1] if cols else None)
+                    # Column names live in manifest.columns[].name, not result.column_names
+                    manifest_cols = [c["name"] for c in data.get("manifest", {}).get("columns", [])]
+                    rows = data.get("result", {}).get("data_array", [])
 
-                    hits = [
-                        {
-                            "neighbor_id": str(dict(zip(cols, row)).get(ID_COLUMN, "")),
-                            "search_score": float(dict(zip(cols, row)).get(score_key, 0.0)) if score_key else 0.0,
-                        }
-                        for row in rows
-                    ]
+                    id_idx    = manifest_cols.index(ID_COLUMN) if ID_COLUMN in manifest_cols else 0
+                    score_idx = manifest_cols.index("score")   if "score"   in manifest_cols else -1
+
+                    hits = [{"neighbor_id": str(row[id_idx]), "search_score": float(row[score_idx])} for row in rows]
                     return row_id, hits, latency_ms
 
             except (aiohttp.ClientError, asyncio.TimeoutError):
@@ -172,7 +168,7 @@ async def run_inference_job():
 
     url = f"{HOST}/api/2.0/vector-search/indexes/{INDEX_NAME}/query"
     headers = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
-    connector = aiohttp.TCPConnector(limit=0)  # no ceiling — VS rate-limiting drives backoff
+    connector = aiohttp.TCPConnector(limit=0)
 
     total_rows = len(all_rows)
     processed = 0
@@ -235,11 +231,11 @@ await run_inference_job()
 
 # DBTITLE 1,Output table summary
 display(spark.sql(f"""
-SELECT
-    COUNT(*)                              AS total_queries,
-    AVG(SIZE(matched_account_ids))        AS avg_matches_per_query,
-    AVG(search_scores[0])                 AS avg_top1_score,
-    MIN(processed_at)                     AS started_at,
-    MAX(processed_at)                     AS finished_at
+SELECT *
 FROM {OUTPUT_TABLE}
+LIMIT 20
 """))
+
+# COMMAND ----------
+
+
