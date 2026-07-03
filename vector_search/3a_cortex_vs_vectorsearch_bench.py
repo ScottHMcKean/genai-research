@@ -279,3 +279,4 @@ print(f"""curl -X POST \\
   -H "X-Snowflake-Authorization-Token-Type: PROGRAMMATIC_ACCESS_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{json.dumps(_body)}'""")
+

@@ -1,0 +1,37 @@
+bundle:
+  name: vs-benchmark
+
+workspace:
+  host: https://fevm-shm-skunkworks.cloud.databricks.com
+
+targets:
+  dev:
+    default: true
+    mode: development
+
+resources:
+  jobs:
+    vs_spark_benchmark:
+      name: vs-spark-benchmark
+
+      # ── Compute ────────────────────────────────────────────────────────────
+      # No new_cluster / existing_cluster_id → serverless job compute.
+      # This avoids the need for classic EC2 cluster creation permissions.
+      # Each Spark task runs in a separate Python process on the serverless
+      # pool, giving true multi-process parallelism for mapInPandas.
+
+      tasks:
+        - task_key: benchmark
+          notebook_task:
+            notebook_path: /Users/scott.mckean@databricks.com/genai-research/vector_search/3c_benchmarking
+            base_parameters:
+              initial_concurrency:  "2000"
+              max_rows:             "10000"
+              batch_size:           "1000"
+              output_table:         shm_skunkworks_catalog.vector_search.combined_benchmark
+              index_name:           shm_skunkworks_catalog.vector_search.index
+              endpoint_name:        vs
+              id_column:            registeredAccountId
+              vector_column:        query_vec
+              top_k:                "10"
+              inference_month:      "2025-01"
