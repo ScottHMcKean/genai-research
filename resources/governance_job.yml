@@ -1,15 +1,15 @@
 # AI Governance demo -- Unity AI Gateway + MCP + observability over the claims spine.
 #
 # Deploy:  databricks bundle deploy -t dev
-# Run:     databricks bundle run -t dev ai_governance_job
+# Run:     databricks bundle run -t dev governance_job
 #
 # Serverless notebook tasks. 00 checks the shared claims data exists (run
-# claims_demo/00_setup_and_data first). Notebooks do their own %pip install, so the
+# fins_data/generate_data first). Notebooks do their own %pip install, so the
 # environment just pins the serverless client version.
 
 resources:
   jobs:
-    ai_governance_job:
+    governance_job:
       name: "[AI Governance] Unity AI Gateway + MCP + observability (claims)"
       max_concurrent_runs: 1
 
@@ -21,7 +21,7 @@ resources:
       tasks:
         - task_key: setup_check
           notebook_task:
-            notebook_path: ../ai_governance/00_setup.py
+            notebook_path: ../governance/00_setup.py
           environment_key: serverless
           timeout_seconds: 600
 
@@ -29,7 +29,7 @@ resources:
           depends_on:
             - task_key: setup_check
           notebook_task:
-            notebook_path: ../ai_governance/01_ai_gateway.py
+            notebook_path: ../governance/01_ai_gateway.py
           environment_key: serverless
           timeout_seconds: 1800
 
@@ -37,7 +37,7 @@ resources:
           depends_on:
             - task_key: setup_check
           notebook_task:
-            notebook_path: ../ai_governance/02_mcp_governance.py
+            notebook_path: ../governance/02_mcp_governance.py
           environment_key: serverless
           timeout_seconds: 1200
 
@@ -46,6 +46,6 @@ resources:
             - task_key: ai_gateway
             - task_key: mcp_governance
           notebook_task:
-            notebook_path: ../ai_governance/03_governance_observability.py
+            notebook_path: ../governance/03_governance_observability.py
           environment_key: serverless
           timeout_seconds: 900

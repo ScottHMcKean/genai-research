@@ -26,10 +26,10 @@ throughout.
 
 | # | Notebook | What it does |
 |---|----------|--------------|
-| 00 | `00_setup.py` | Checks the shared claims spine exists (run `claims_demo/00_setup_and_data.py` first). |
+| 00 | `00_setup.py` | Checks the shared claims spine exists (run `fins_data/generate_data.py` first). |
 | 01 | `01_vector_search.py` | Builds a **Delta-Sync Vector Search index** on `doc_chunks` with managed embeddings (`databricks-gte-large-en`), reusing the `vs` endpoint. |
 | 02 | `02_custom_rag_agent.py` | Logs `agent.py` (a `ResponsesAgent`) with VS + FMAPI resources, registers to Unity Catalog, and **deploys a Model Serving endpoint** (`claims-rag-agent`). |
-| 03 | `03_genie_ka_supervisor.py` | Creates an **Agent Bricks Knowledge Assistant** over the docs, a **UC function** claim-lookup tool, and a **Supervisor Agent** that routes between them. |
+| 03 | `03_agent_bricks.py` | Creates an **Agent Bricks Knowledge Assistant** over the docs, a **UC function** claim-lookup tool, and a **Supervisor Agent** that routes between them. |
 
 `agent.py` — the custom RAG agent (retrieve-then-generate: Vector Search → Claude Sonnet
 4.5, grounded + cited). Kept as a standalone file so `mlflow.pyfunc.log_model` can package it.
@@ -43,14 +43,15 @@ foundation-model APIs (Claude Sonnet 4.5).
 
 ## Run it
 
-```bash
-# from repo root
-databricks bundle deploy -t dev
-databricks bundle run -t dev claims_demo_setup_job       # build the shared data first
-databricks bundle run -t dev agent_bricks_claims_job     # this demo
-```
+1. Run `fins_data/generate_data.py` once (builds the common data).
+2. Open this folder and run `00 → 03` in order on serverless.
 
-Or run the notebooks interactively in order.
+Optional — deploy from the repo root as a Job instead:
+
+```bash
+databricks bundle deploy -t dev
+databricks bundle run -t dev agents_job
+```
 
 ## Notes
 

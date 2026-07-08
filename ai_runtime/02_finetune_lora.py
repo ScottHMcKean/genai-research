@@ -135,11 +135,15 @@ args = TrainingArguments(
     eval_strategy="epoch", save_strategy="no", logging_steps=20,
     seed=SEED, report_to=[], use_cpu=(DEVICE == "cpu"),
 )
-trainer = Trainer(
-    model=model, args=args, train_dataset=train_ds, eval_dataset=test_ds,
-    tokenizer=tokenizer, data_collator=DataCollatorWithPadding(tokenizer),
-    compute_metrics=metrics,
-)
+import inspect
+_tk = dict(model=model, args=args, train_dataset=train_ds, eval_dataset=test_ds,
+           data_collator=DataCollatorWithPadding(tokenizer), compute_metrics=metrics)
+# transformers >=4.46 renamed the `tokenizer` arg to `processing_class`.
+if "processing_class" in inspect.signature(Trainer.__init__).parameters:
+    _tk["processing_class"] = tokenizer
+else:
+    _tk["tokenizer"] = tokenizer
+trainer = Trainer(**_tk)
 mlflow.autolog(disable=True)  # we log explicitly below
 train_result = trainer.train()
 eval_result = trainer.evaluate()

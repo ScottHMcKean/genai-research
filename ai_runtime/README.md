@@ -17,7 +17,7 @@ from the free-text adjuster `note`.
 |---|----------|---------------|---------|
 | 00 | `00_setup.py` | Idempotent. Builds a stratified `triage_train` / `triage_test` split from the shared `claim_notes`. Does **not** regenerate raw data. | Serverless (env 4/5) |
 | 01 | `01_ray_ai_runtime.py` | **Ray** fans out zero-shot LLM triage over many notes against the Foundation Model API — driver-local on serverless, multi-node on a classic cluster. Includes a **serial-vs-Ray speedup** comparison and a **Ray Data `map_batches`** pipeline (Ray Core *and* Ray Data). Throughput + accuracy + speedup logged. | Serverless **env 5** (Ray) |
-| 02 | `02_finetune_lora.py` | **Real LoRA fine-tune** of `distilbert-base-uncased` → 3-class severity classifier. Logged to MLflow, registered in **Unity Catalog** (`claims_demo.claims_triage_model`). | **GPU** (g5.xlarge) or serverless GPU; **CPU fallback** |
+| 02 | `02_finetune_lora.py` | **Real LoRA fine-tune** of `distilbert-base-uncased` → 3-class severity classifier. Logged to MLflow, registered in **Unity Catalog** (`claims_demo.claims_triage_model`). | **Serverless GPU** (A10, AI Runtime); auto **CPU fallback** |
 | 03 | `03_serve_and_eval.py` | Fine-tuned vs **zero-shot LLM** on the same test set (accuracy / macro-F1); optional Model Serving deploy. | Serverless (env 4/5) |
 
 ## The talk track
@@ -36,7 +36,7 @@ runs on-platform under the same governance. Reserve the big LLM for open-ended r
 
 ## Prerequisites
 
-- Shared spine built: run `../claims_demo/00_setup_and_data.py` once (creates
+- Shared spine built: run `../fins_data/generate_data.py` once (creates
   `shm_skunkworks_catalog.claims_demo.claim_notes`).
 - Foundation Model API access (uses `databricks-claude-sonnet-4-5`, pay-per-token).
 
@@ -52,10 +52,16 @@ runs on-platform under the same governance. Reserve the big LLM for open-ended r
 - Serving (04, in notebook 03) is **off by default** (`DEPLOY=False`) so nothing provisions
   unattended.
 
-## Deploy
+## Run it
+
+1. Run `fins_data/generate_data.py` once (builds the common data).
+2. Open this folder and run `00 → 03` in order. `02` uses **serverless GPU** (A10) — pick
+   the GPU accelerator in the notebook's Environment panel, or use the DAB job below which
+   requests it automatically.
+
+Optional — deploy from the repo root as a Job instead:
 
 ```bash
-# from repo root, after moving resources_ai_runtime_job.yml into resources/
-databricks bundle deploy -t dev -p shm-fe-vm
-databricks bundle run  -t dev ai_runtime_job -p shm-fe-vm
+databricks bundle deploy -t dev
+databricks bundle run -t dev ai_runtime_job
 ```

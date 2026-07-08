@@ -1,5 +1,5 @@
 # Config for the Agent Bricks + Custom RAG claims demo.
-# Mirrors claims_demo/config.py -- kept local so each demo folder is self-contained
+# Mirrors fins_data/config.py -- kept local so each demo folder is self-contained
 # when synced as a bundle.
 
 CATALOG = "shm_skunkworks_catalog"

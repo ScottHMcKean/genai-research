@@ -4,18 +4,26 @@ Index of notebooks by topic. Most run on [Databricks Serverless](https://docs.da
 
 ---
 
-## Insurance & Claims demo suite
+## FINS demo suite
 
-A cohesive, from-scratch demo suite on one synthetic insurance-and-claims spine, built
-for the sessions. Deploy with `databricks bundle deploy -t dev`, then run
-`claims_demo_setup_job` first.
+A cohesive demo suite on **one common Unity Catalog dataset** (financial-services /
+insurance claims — chosen only to illustrate the features). Each use case is its own
+folder of **notebooks you run in order** on serverless; a customer can lift a single
+folder, point `config.py` at their own data, and go.
 
-| Folder | Demo | Showcases |
-|--------|------|-----------|
-| [`claims_demo/`](claims_demo/README.md) | Shared data spine (run first) | Synthetic claims, adjuster notes, knowledge docs, chunked source table |
-| [`agent_bricks_claims/`](agent_bricks_claims/README.md) | **Agents**: Knowledge Assistant + Supervisor + custom RAG agent | Agent Bricks (KA, Supervisor), Vector Search, MLflow `ResponsesAgent`, model serving, UC-function tools |
-| [`ai_governance/`](ai_governance/README.md) | **Governance**: AI Gateway + MCP | Unity AI Gateway (usage, rate limits, PII guardrails, inference tables), managed + external MCP, lineage & cost observability |
-| [`ai_runtime/`](ai_runtime/README.md) | **AI Runtime**: Ray + fine-tuning | Ray on serverless for distributed triage, LoRA fine-tune → UC model registry, fine-tuned vs zero-shot eval |
+**Run order:** run `fins_data/generate_data.py` **once** to build the common dataset, then
+open any use-case folder and run its notebooks `00 → 03`.
+
+| Folder | Use case | Showcases |
+|--------|----------|-----------|
+| [`fins_data/`](fins_data/README.md) | **Common data** (run first) | One script → synthetic claims (+PII), adjuster notes, knowledge docs, chunked VS source, real public insurance PDFs |
+| [`agents/`](agents/README.md) | **Agents** | Agent Bricks (Knowledge Assistant + Supervisor), Vector Search, MLflow `ResponsesAgent` custom RAG, model serving, UC-function tools |
+| [`governance/`](governance/README.md) | **Governance** | Unity AI Gateway (usage, rate limits, **PII guardrails**, inference tables), managed + external MCP, lineage & cost observability |
+| [`ai_runtime/`](ai_runtime/README.md) | **AI Runtime** | Ray on serverless (fan-out + Ray Data), LoRA fine-tune on **serverless GPU** → UC model registry, fine-tuned vs zero-shot eval |
+| [`document_intelligence/`](document_intelligence/README.md) | **Document Intelligence** | `ai_parse_document` → `ai_extract` → MLflow evaluate over the common insurance PDFs |
+
+Everything runs as plain notebooks. Optional: `databricks bundle deploy -t dev` deploys
+each folder as a Job (see `resources/*.yml`) if you'd rather run them from the root.
 
 ---
 

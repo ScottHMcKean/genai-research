@@ -1,11 +1,11 @@
 # Agent Bricks + Custom RAG (insurance claims) -- Section 2 "Agents" demo.
 #
 # Deploy:  databricks bundle deploy -t dev
-# Run:     databricks bundle run -t dev agent_bricks_claims_job
+# Run:     databricks bundle run -t dev agents_job
 #
 # Serverless notebook tasks (.py source notebooks; paths without extension). Each
 # notebook does its own %pip install. Assumes the shared claims spine exists -- run
-# claims_demo/00_setup_and_data first (task 00 checks and fails fast if missing).
+# fins_data/generate_data first (task 00 checks and fails fast if missing).
 #
 #   00 setup_check     -> assert claims spine present
 #   01 vector_search   -> build Delta-Sync VS index on doc_chunks (reuses `vs` endpoint)
@@ -16,7 +16,7 @@
 
 resources:
   jobs:
-    agent_bricks_claims_job:
+    agents_job:
       name: "[Agents] Claims Agent Bricks (KA + Supervisor) + Custom RAG"
       max_concurrent_runs: 1
 
@@ -28,7 +28,7 @@ resources:
       tasks:
         - task_key: setup_check
           notebook_task:
-            notebook_path: ../agent_bricks_claims/00_setup.py
+            notebook_path: ../agents/00_setup.py
           environment_key: serverless
           timeout_seconds: 600
 
@@ -36,7 +36,7 @@ resources:
           depends_on:
             - task_key: setup_check
           notebook_task:
-            notebook_path: ../agent_bricks_claims/01_vector_search.py
+            notebook_path: ../agents/01_vector_search.py
           environment_key: serverless
           timeout_seconds: 3600
 
@@ -44,7 +44,7 @@ resources:
           depends_on:
             - task_key: vector_search
           notebook_task:
-            notebook_path: ../agent_bricks_claims/02_custom_rag_agent.py
+            notebook_path: ../agents/02_custom_rag_agent.py
           environment_key: serverless
           timeout_seconds: 3600
 
@@ -52,6 +52,6 @@ resources:
           depends_on:
             - task_key: setup_check
           notebook_task:
-            notebook_path: ../agent_bricks_claims/03_genie_ka_supervisor.py
+            notebook_path: ../agents/03_agent_bricks.py
           environment_key: serverless
           timeout_seconds: 1800

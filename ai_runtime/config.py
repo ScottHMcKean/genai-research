@@ -1,6 +1,6 @@
 # AI Runtime & Fine-Tuning demo config.
 # Plain Python so every notebook imports the same names.
-# Builds on the shared claims spine created by claims_demo/00_setup_and_data.py.
+# Builds on the shared claims spine created by fins_data/generate_data.py.
 
 CATALOG = "shm_skunkworks_catalog"
 SCHEMA = "claims_demo"

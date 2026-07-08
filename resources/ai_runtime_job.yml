@@ -22,12 +22,10 @@ resources:
       name: "[AI Runtime] Claims triage -- Ray fan-out + LoRA fine-tune"
       max_concurrent_runs: 1
 
-      # NOTE: this FEVM is serverless-only ("Only serverless compute is supported"),
-      # so a classic GPU job cluster is not allowed. The LoRA fine-tune runs on
-      # serverless -- DistilBERT is tiny (~66M params) and the training set is a few
-      # hundred rows, so it completes on serverless CPU in minutes. The notebook
-      # auto-detects CUDA and uses serverless GPU automatically if the workspace has
-      # it enabled.
+      # NOTE: this workspace is serverless-only (no classic clusters), but serverless GPU
+      # (AI Runtime) IS available -- the LoRA fine-tune task requests an A10 via
+      # `compute.hardware_accelerator` below. The notebook auto-detects CUDA (full run on
+      # GPU) and falls back to a small capped CPU run if no GPU is available.
       environments:
         - environment_key: serverless_v5
           spec:
@@ -54,6 +52,12 @@ resources:
           notebook_task:
             notebook_path: ../ai_runtime/02_finetune_lora.py
           environment_key: serverless_v5
+          # Serverless GPU (AI Runtime). A10 = 24 GB, plenty for a DistilBERT LoRA.
+          # Requires the AI Runtime preview enabled in workspace admin settings, in a
+          # supported region (this FEVM is us-east-2 ✓). The notebook auto-detects CUDA
+          # and full-runs on GPU; it falls back to a capped CPU run if no GPU is available.
+          compute:
+            hardware_accelerator: GPU_1xA10
           timeout_seconds: 3600
 
         - task_key: serve_and_eval

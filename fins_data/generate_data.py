@@ -1,10 +1,13 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 00 · Claims demo — shared setup & data
+# MAGIC # FINS data — generate the common demo dataset
 # MAGIC
-# MAGIC Builds the **one insurance-and-claims spine** the three demos share. Runs on
-# MAGIC **serverless** (no extra installs). Idempotent — safe to re-run; this is the
-# MAGIC "build from scratch" step.
+# MAGIC **The single script** that builds the one Unity Catalog schema every use-case folder
+# MAGIC reads from (`agents/`, `governance/`, `ai_runtime/`, `document_intelligence/`). Runs on
+# MAGIC **serverless**, no extra installs. Idempotent — safe to re-run.
+# MAGIC
+# MAGIC Run this once, then run any use-case demo. To adapt to another discipline, swap the
+# MAGIC generators below for your domain and update `config.py`.
 # MAGIC
 # MAGIC Creates in `shm_skunkworks_catalog.claims_demo`:
 # MAGIC
@@ -329,6 +332,55 @@ display(spark.table(CHUNKS_TABLE).limit(5))
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Done — shared claims spine is ready
-# MAGIC Next: run the demo you want. Each demo's `00_` step re-runs this notebook first, so
-# MAGIC any demo can be built from scratch on its own.
+# MAGIC ## 5 · Real public insurance PDFs  (→ Document Intelligence demo)
+# MAGIC
+# MAGIC Downloads a handful of **genuine public** ACORD / CMS insurance PDFs into a Volume so
+# MAGIC the `document_intelligence/` demo (parse → extract → evaluate) runs on the same common
+# MAGIC schema. Real, messy layouts (OCR, multi-column, template placeholders).
+
+# COMMAND ----------
+
+import requests
+from config import PDF_VOLUME, PDF_VOLUME_PATH
+
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.{PDF_VOLUME}")
+dbutils.fs.mkdirs(PDF_VOLUME_PATH)
+
+REAL_DOCS = {
+    "acord_certificate.pdf":      "https://azdot.gov/sites/default/files/2019/06/sample-insurance-certificate-accord-form.pdf",
+    "acord_nyc_dcla.pdf":         "https://www.nyc.gov/assets/dcla/downloads/pdf/cdf_sample_cgl.pdf",
+    "acord_nyc_mome.pdf":         "https://www.nyc.gov/assets/mome/pdf/Sample-MOME-ACORD_25_2016-03.pdf",
+    "nyc_workerscomp_sample.pdf": "https://www.nyc.gov/html/dcla/downloads/pdf/cdf_sample_workerscomp_c_105_2.pdf",
+    "acord_nyc_dycd.pdf":         "https://www.nyc.gov/assets/dycd/downloads/pdf/Insurance-Sample-Package25.pdf",
+    "acord_moval.pdf":            "https://moval.gov/departments/media/pdf/SampleInsuranceCertsEndorsements.pdf",
+    "acord_ny_ogs.pdf":           "https://ogs.ny.gov/system/files/documents/2018/10/acord25version918dcsamplenopollution.pdf",
+    "nyc_acord_sample.pdf":       "https://www.nyc.gov/assets/buildings/pdf/acord_cert_of_ins_sample.pdf",
+    "cms1500_claim_form.pdf":     "https://www.cms.gov/medicare/cms-forms/cms-forms/downloads/cms1500.pdf",
+    "acord_tx.pdf":               "https://www.rrc.texas.gov/media/kh2p1ugz/acord25_-certificate-of-insurance.pdf",
+}
+ok = 0
+for fname, url in REAL_DOCS.items():
+    dest = f"{PDF_VOLUME_PATH}/{fname}"
+    if os.path.exists(dest):
+        ok += 1
+        continue
+    try:
+        r = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            f.write(r.content)
+        ok += 1
+    except Exception as e:
+        print(f"  skip {fname}: {e}")
+print(f"Staged {ok}/{len(REAL_DOCS)} insurance PDFs -> {PDF_VOLUME_PATH}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Done — common FINS data spine is ready
+# MAGIC
+# MAGIC One script, one Unity Catalog schema. Every use-case folder (`agents/`,
+# MAGIC `governance/`, `ai_runtime/`, `document_intelligence/`) reads from here.
+# MAGIC
+# MAGIC **To adapt to another discipline:** swap the synthetic generators + `DOCS` above for
+# MAGIC your own domain (keep the same table/column shape, or update each folder's `config.py`).

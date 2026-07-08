@@ -5,7 +5,7 @@
 # MAGIC The governance demo reads the **shared claims spine**. This notebook just verifies
 # MAGIC it exists (idempotent) — it does **not** regenerate data.
 # MAGIC
-# MAGIC If anything is missing, run **`claims_demo/00_setup_and_data.py`** first (that is the
+# MAGIC If anything is missing, run **`fins_data/generate_data.py`** first (that is the
 # MAGIC one "build from scratch" step for the whole suite).
 
 # COMMAND ----------
@@ -28,7 +28,7 @@ if missing:
     raise RuntimeError(
         "Shared claims data missing: "
         + ", ".join(missing)
-        + "\n-> Run claims_demo/00_setup_and_data.py first."
+        + "\n-> Run fins_data/generate_data.py first."
     )
 print("\nShared claims spine present. Governance demo is good to go.")
 

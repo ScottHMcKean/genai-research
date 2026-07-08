@@ -7,7 +7,7 @@
 # MAGIC **claims-triage** task: predict `severity` (Low / Medium / High) from the free-text
 # MAGIC adjuster `note`.
 # MAGIC
-# MAGIC If `claim_notes` is missing, run `claims_demo/00_setup_and_data.py` first.
+# MAGIC If `claim_notes` is missing, run `fins_data/generate_data.py` first.
 # MAGIC
 # MAGIC Runs on **serverless** (base environment `4` or `5`).
 
@@ -27,7 +27,7 @@ from config import NOTES_TABLE, TRAIN_TABLE, TEST_TABLE, LABELS, SEED
 
 if not spark.catalog.tableExists(NOTES_TABLE):
     raise RuntimeError(
-        f"{NOTES_TABLE} not found. Run claims_demo/00_setup_and_data.py first "
+        f"{NOTES_TABLE} not found. Run fins_data/generate_data.py first "
         "(it builds the shared claims spine)."
     )
 notes = spark.table(NOTES_TABLE).select("claim_id", "note", "severity")

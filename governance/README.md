@@ -8,7 +8,7 @@ Maps to the Day-2 section **"MCP + AI Gateway"**.
 
 ## Prerequisites
 
-Run **`claims_demo/00_setup_and_data.py`** once — it builds
+Run **`fins_data/generate_data.py`** once — it builds
 `shm_skunkworks_catalog.claims_demo` (`claims` with synthetic PII, `claim_notes`,
 `doc_chunks`, `docs` volume). Everything here reads that.
 
@@ -41,9 +41,14 @@ Run **`claims_demo/00_setup_and_data.py`** once — it builds
 - Inference-table and system-table telemetry are **asynchronous** (minutes to a few hours);
   re-run notebook 03 later to see populated rows.
 
-## Deploy
+## Run it
+
+1. Run `fins_data/generate_data.py` once (builds the common data).
+2. Open this folder and run `00 → 03` in order on serverless.
+
+Optional — deploy from the repo root as a Job instead:
 
 ```bash
 databricks bundle deploy -t dev
-databricks bundle run   -t dev ai_governance_job
+databricks bundle run -t dev governance_job
 ```

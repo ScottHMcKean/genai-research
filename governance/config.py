@@ -1,4 +1,4 @@
-# Local config for the AI Governance demo (values copied from claims_demo/config.py
+# Local config for the AI Governance demo (values copied from fins_data/config.py
 # so this folder is self-contained when synced as a bundle).
 
 CATALOG = "shm_skunkworks_catalog"
