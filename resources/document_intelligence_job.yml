@@ -23,25 +23,32 @@ resources:
             client: "5"
 
       tasks:
-        - task_key: ai_parse_chain
+        - task_key: setup_and_data
           notebook_task:
-            notebook_path: ../document_intelligence/claim_doc_ai_parse.ipynb
+            notebook_path: ../document_intelligence/00_setup_and_data.ipynb
+          environment_key: serverless_v5
+          timeout_seconds: 1200
+
+        - task_key: parse_and_cost
+          depends_on:
+            - task_key: setup_and_data
+          notebook_task:
+            notebook_path: ../document_intelligence/01_parse_and_cost.ipynb
           environment_key: serverless_v5
           timeout_seconds: 3600
 
-        - task_key: ray_claude_direct
+        - task_key: extract_fields
           depends_on:
-            - task_key: ai_parse_chain  # reuses the volume + PDFs staged upstream
+            - task_key: parse_and_cost
           notebook_task:
-            notebook_path: ../document_intelligence/claim_doc_ray_claude.ipynb
+            notebook_path: ../document_intelligence/02_extract_fields.ipynb
           environment_key: serverless_v5
           timeout_seconds: 3600
 
-        - task_key: profile
+        - task_key: evaluate_mlflow
           depends_on:
-            - task_key: ai_parse_chain
-            - task_key: ray_claude_direct
+            - task_key: extract_fields
           notebook_task:
-            notebook_path: ../document_intelligence/claim_doc_profile.ipynb
+            notebook_path: ../document_intelligence/03_evaluate_mlflow.ipynb
           environment_key: serverless_v5
-          timeout_seconds: 600
+          timeout_seconds: 1800

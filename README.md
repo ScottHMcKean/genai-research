@@ -4,6 +4,21 @@ Index of notebooks by topic. Most run on [Databricks Serverless](https://docs.da
 
 ---
 
+## Insurance & Claims demo suite
+
+A cohesive, from-scratch demo suite on one synthetic insurance-and-claims spine, built
+for the sessions. Deploy with `databricks bundle deploy -t dev`, then run
+`claims_demo_setup_job` first.
+
+| Folder | Demo | Showcases |
+|--------|------|-----------|
+| [`claims_demo/`](claims_demo/README.md) | Shared data spine (run first) | Synthetic claims, adjuster notes, knowledge docs, chunked source table |
+| [`agent_bricks_claims/`](agent_bricks_claims/README.md) | **Agents**: Knowledge Assistant + Supervisor + custom RAG agent | Agent Bricks (KA, Supervisor), Vector Search, MLflow `ResponsesAgent`, model serving, UC-function tools |
+| [`ai_governance/`](ai_governance/README.md) | **Governance**: AI Gateway + MCP | Unity AI Gateway (usage, rate limits, PII guardrails, inference tables), managed + external MCP, lineage & cost observability |
+| [`ai_runtime/`](ai_runtime/README.md) | **AI Runtime**: Ray + fine-tuning | Ray on serverless for distributed triage, LoRA fine-tune → UC model registry, fine-tuned vs zero-shot eval |
+
+---
+
 ## Index
 
 ### AI functions (benchmarking & testing, incl. AI_QUERY and external models)

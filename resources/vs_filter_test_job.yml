@@ -15,12 +15,12 @@ resources:
       tasks:
         - task_key: self_managed
           notebook_task:
-            notebook_path: ../vector_search/01_self_managed_filter_test.py
+            notebook_path: ../vector_search/1a_self_managed_filter_test.py
           timeout_seconds: 1800
 
         - task_key: managed_embedding
           depends_on:
             - task_key: self_managed
           notebook_task:
-            notebook_path: ../vector_search/02_managed_embedding_filter_test.py
+            notebook_path: ../vector_search/1b_managed_embedding_filter_test.py
           timeout_seconds: 1800

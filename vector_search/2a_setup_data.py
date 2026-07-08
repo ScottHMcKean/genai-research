@@ -182,7 +182,7 @@ def embed_table_ok(tbl, expected_n):
         return False
 
 for scale, n in C.active_scales().items():
-    for model in C.MODELS:
+    for model in C.models_for(scale):
         tgt = C.embed_table(scale, model)
         if embed_table_ok(tgt, n):
             print(f"  {tgt}: {n:,} rows, dim={C.EMBED_DIM} -- skip")

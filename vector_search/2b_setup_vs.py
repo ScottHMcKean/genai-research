@@ -33,27 +33,27 @@ print(f"scales={list(C.active_scales())} models={C.MODELS} endpoint={C.VS_ENDPOI
 
 # COMMAND ----------
 
-def index_state(name):
+def index_get(name):
     try:
-        s = w.vector_search_indexes.get_index(index_name=name).status
-        return (bool(s and s.ready), int(s.indexed_row_count or 0) if s else 0)
+        return w.vector_search_indexes.get_index(index_name=name)
     except Exception:
-        return (False, 0)
+        return None
 
-to_wait = []
-for scale, model in C.combos():
-    name = C.vs_index_name(scale, model)
-    src = C.embed_table(scale, model)
-    expected = C.active_scales()[scale]
-    ready, rows = index_state(name)
-    if ready and rows >= expected:
-        print(f"  {name}: ready ({rows:,} rows) -- skip")
-        continue
-    try:
-        w.vector_search_indexes.delete_index(index_name=name)
-        time.sleep(3)
-    except Exception:
-        pass
+def index_ready_rows(idx):
+    s = idx.status if idx else None
+    return (bool(s and s.ready), int(s.indexed_row_count or 0) if s else 0)
+
+def wait_gone(name, timeout=600):
+    """Poll until get_index returns nothing (or raises NotFound)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if index_get(name) is None:
+            return
+        print(f"  {name}: waiting for deletion to complete...")
+        time.sleep(10)
+    raise TimeoutError(f"{name} still exists after deletion timeout")
+
+def create_index(name, src):
     w.vector_search_indexes.create_index(
         name=name, endpoint_name=C.VS_ENDPOINT, primary_key="id",
         index_type=VectorIndexType.DELTA_SYNC,
@@ -64,6 +64,29 @@ for scale, model in C.combos():
             ],
         ),
     )
+
+to_wait = []
+for scale, model in C.combos():
+    name = C.vs_index_name(scale, model)
+    src = C.embed_table(scale, model)
+    expected = C.active_scales()[scale]
+
+    idx = index_get(name)
+    if idx:
+        ready, rows = index_ready_rows(idx)
+        if ready and rows >= expected:
+            print(f"  {name}: ready ({rows:,} rows) -- skip")
+            continue
+        # Exists but not usable -- delete and wait for delete to truly complete
+        # before create, otherwise create races with async deletion.
+        print(f"  {name}: exists but not ready -- deleting")
+        try:
+            w.vector_search_indexes.delete_index(index_name=name)
+        except Exception as e:
+            print(f"    delete said: {e}")
+        wait_gone(name)
+
+    create_index(name, src)
     to_wait.append(name)
     print(f"  {name}: creating")
 
@@ -78,7 +101,7 @@ deadline = time.time() + 1800
 while to_wait and time.time() < deadline:
     still = []
     for name in to_wait:
-        ready, rows = index_state(name)
+        ready, rows = index_ready_rows(index_get(name))
         if ready and rows > 0:
             print(f"  {name}: ready ({rows:,} rows)")
         else:

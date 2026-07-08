@@ -1,0 +1,57 @@
+# Agent Bricks + Custom RAG (insurance claims) -- Section 2 "Agents" demo.
+#
+# Deploy:  databricks bundle deploy -t dev
+# Run:     databricks bundle run -t dev agent_bricks_claims_job
+#
+# Serverless notebook tasks (.py source notebooks; paths without extension). Each
+# notebook does its own %pip install. Assumes the shared claims spine exists -- run
+# claims_demo/00_setup_and_data first (task 00 checks and fails fast if missing).
+#
+#   00 setup_check     -> assert claims spine present
+#   01 vector_search   -> build Delta-Sync VS index on doc_chunks (reuses `vs` endpoint)
+#   02 custom_rag_agent-> log + register + deploy the ResponsesAgent (~15 min to READY)
+#   03 agent_bricks    -> Knowledge Assistant + Supervisor (KA + UC-function tools)
+#
+# 03 is independent of 01/02; 02 needs the index from 01.
+
+resources:
+  jobs:
+    agent_bricks_claims_job:
+      name: "[Agents] Claims Agent Bricks (KA + Supervisor) + Custom RAG"
+      max_concurrent_runs: 1
+
+      environments:
+        - environment_key: serverless
+          spec:
+            client: "4"
+
+      tasks:
+        - task_key: setup_check
+          notebook_task:
+            notebook_path: ../agent_bricks_claims/00_setup.py
+          environment_key: serverless
+          timeout_seconds: 600
+
+        - task_key: vector_search
+          depends_on:
+            - task_key: setup_check
+          notebook_task:
+            notebook_path: ../agent_bricks_claims/01_vector_search.py
+          environment_key: serverless
+          timeout_seconds: 3600
+
+        - task_key: custom_rag_agent
+          depends_on:
+            - task_key: vector_search
+          notebook_task:
+            notebook_path: ../agent_bricks_claims/02_custom_rag_agent.py
+          environment_key: serverless
+          timeout_seconds: 3600
+
+        - task_key: agent_bricks
+          depends_on:
+            - task_key: setup_check
+          notebook_task:
+            notebook_path: ../agent_bricks_claims/03_genie_ka_supervisor.py
+          environment_key: serverless
+          timeout_seconds: 1800
