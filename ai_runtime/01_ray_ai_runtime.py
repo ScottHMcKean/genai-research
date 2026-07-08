@@ -86,12 +86,23 @@ TRIAGE_PROMPT = (
     "Respond with ONLY the single word: Low, Medium, or High.\n\nNote: "
 )
 
+def _worker_client(token: str, base_url: str):
+    """One OpenAI client per Ray worker process, reused across the notes it handles
+    (Ray reuses worker processes across tasks) instead of one per note."""
+    from openai import OpenAI
+    global _WORKER_CLIENT
+    try:
+        return _WORKER_CLIENT
+    except NameError:
+        _WORKER_CLIENT = OpenAI(api_key=token, base_url=base_url)
+        return _WORKER_CLIENT
+
+
 @ray.remote(num_cpus=0.25)
 def triage(claim_id: str, note: str, token: str, base_url: str, model: str, prompt: str) -> dict:
-    from openai import OpenAI
     t0 = time.perf_counter()
     try:
-        client = OpenAI(api_key=token, base_url=base_url)
+        client = _worker_client(token, base_url)
         resp = client.chat.completions.create(
             model=model, max_tokens=4, temperature=0,
             messages=[{"role": "user", "content": prompt + note}],
@@ -124,8 +135,13 @@ print(f"Ray wall: {wall_s:.1f}s | notes/s: {len(res_df)/wall_s:.2f} | errors: {n
       f"p50 latency: {res_df['latency_s'].median():.2f}s")
 
 merged = notes_df.merge(res_df, on="claim_id")
-acc = (merged["severity"] == merged["pred_severity"]).mean()
-print(f"Zero-shot triage accuracy vs labels: {acc:.3f}")
+# Score accuracy only over notes that actually returned a prediction -- counting
+# transport failures (rate-limit/timeout -> pred_severity=None) as wrong would
+# understate the model. Report the coverage separately.
+scored = merged[merged["pred_severity"].notna()]
+acc = (scored["severity"] == scored["pred_severity"]).mean() if len(scored) else float("nan")
+print(f"Zero-shot triage accuracy vs labels: {acc:.3f} "
+      f"(over {len(scored)}/{len(merged)} notes; {n_err} failed calls excluded)")
 
 # COMMAND ----------
 
@@ -213,7 +229,8 @@ display(ray_data_out.head(8))
 
 # COMMAND ----------
 
-(spark.createDataFrame(merged[["claim_id", "note", "severity", "pred_severity", "latency_s"]])
+# Persist only rows with a valid prediction (the baseline consumed by notebook 03).
+(spark.createDataFrame(scored[["claim_id", "note", "severity", "pred_severity", "latency_s"]])
     .write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(RAY_SCORED_TABLE))
 
 with mlflow.start_run(run_name="ray_zero_shot_triage"):

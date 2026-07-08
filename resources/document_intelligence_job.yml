@@ -1,15 +1,14 @@
-# Claim document parsing -- ai_parse_document -> ai_query vs. Ray + direct FMAPI.
+# Document Intelligence -- ai_parse_document -> ai_extract -> MLflow evaluate (00->03).
 #
 # Deploy:  databricks bundle deploy -t dev
 # Run:     databricks bundle run -t dev document_intelligence_job
 #
-# Three serverless notebook tasks pinned to environment version 5 (required by the
-# Ray task -- ships Ray preinstalled + supports `ray.util.spark.setup_ray_cluster`).
-# Each notebook does its own `%pip install` + `%restart_python` for extras.
+# PREREQUISITE: run fins_data_setup_job (fins_data/generate_data.py) first -- it stages
+# the insurance PDFs into the raw_pdfs volume. Task 00 here only VERIFIES they exist (it
+# does not download them) and writes golden_labels.
 #
-# Both notebooks assume UC `shm.genai` exists and the running principal can write
-# to it; the ai_parse task creates the `raw_pdfs` volume and downloads the 10-doc
-# golden set the first time it runs.
+# Reads/writes the common schema shm_skunkworks_catalog.claims_demo (see
+# document_intelligence/config.py). Serverless notebook tasks; each does its own %pip.
 
 resources:
   jobs:

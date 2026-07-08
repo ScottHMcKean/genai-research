@@ -13,11 +13,14 @@ from mlflow.types.responses import (
 )
 from typing import Generator
 
-# Kept in sync with config.py (log_model can't import the notebook config at serve time)
-LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
-EMBED_ENDPOINT = "databricks-gte-large-en"
-VS_ENDPOINT = "claims_vs"
-VS_INDEX = "shm_skunkworks_catalog.claims_demo.doc_chunks_index"
+# Single source of truth: config.py is packaged with this file via log_model(code_paths=...)
+# so it imports at serve time too. Repointing CATALOG/SCHEMA in config.py flows through here.
+from config import (
+    CHAT_MODEL as LLM_ENDPOINT,
+    EMBED_MODEL as EMBED_ENDPOINT,
+    VS_ENDPOINT,
+    VS_INDEX,
+)
 
 SYSTEM_PROMPT = (
     "You are a claims assistant for a property & casualty insurer. Answer strictly "

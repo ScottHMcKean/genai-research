@@ -72,14 +72,16 @@ print("Knowledge source added + sync triggered:", src.id)
 
 # COMMAND ----------
 
-CLAIM_LOOKUP_FN = f"{CATALOG}.{SCHEMA}.claim_lookup"
+# Distinct name from governance/'s claim_lookup so the two demos don't clobber each other.
+# Param is p_claim_id (not claim_id) to avoid shadowing the table column.
+CLAIM_LOOKUP_FN = f"{CATALOG}.{SCHEMA}.agent_claim_lookup"
 spark.sql(f"""
-CREATE OR REPLACE FUNCTION {CLAIM_LOOKUP_FN}(claim_id STRING)
+CREATE OR REPLACE FUNCTION {CLAIM_LOOKUP_FN}(p_claim_id STRING)
 RETURNS TABLE(claim_id STRING, claim_type STRING, peril STRING, claim_status STRING,
               severity STRING, claim_amount DOUBLE, paid_amount DOUBLE, region STRING)
 COMMENT 'Look up a single insurance claim by its claim_id (e.g. CLM-100001).'
 RETURN SELECT claim_id, claim_type, peril, claim_status, severity, claim_amount, paid_amount, region
-       FROM {CLAIMS_TABLE} WHERE claim_id = claim_lookup.claim_id
+       FROM {CLAIMS_TABLE} WHERE claim_id = p_claim_id
 """)
 print("Created UC function:", CLAIM_LOOKUP_FN)
 

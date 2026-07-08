@@ -48,17 +48,26 @@ print("Workspace:", host)
 # MAGIC system-managed, so we stand up **our own** endpoint that proxies the same model via
 # MAGIC an *external model* route. AI Gateway attaches to endpoints you own.
 # MAGIC
-# MAGIC > The external-model route uses the notebook's own workspace token to call the
-# MAGIC > in-workspace FM API. If your workspace restricts token creation, skip this cell and
-# MAGIC > instead attach the gateway (cell 2) to any endpoint you already own — the gateway
-# MAGIC > config is identical.
+# MAGIC > The external-model route needs a token to call the in-workspace FM API. Prefer a
+# MAGIC > **secret-backed** token (a service-principal PAT) so the endpoint keeps working after
+# MAGIC > your session ends — set `TOKEN_SECRET_SCOPE`/`TOKEN_SECRET_KEY` in `config.py`. The
+# MAGIC > notebook token is only a last-resort fallback and **expires with the session**, after
+# MAGIC > which the gateway route returns 401 until re-run. (You can also skip this cell and
+# MAGIC > attach the gateway in cell 2 to any endpoint you already own.)
 
 # COMMAND ----------
 
-# Notebook context token -- used only to let the external-model route call this same workspace.
-ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
-token = ctx.apiToken().get()
+from config import TOKEN_SECRET_SCOPE, TOKEN_SECRET_KEY
+
 base_url = f"https://{host}/serving-endpoints"
+if TOKEN_SECRET_SCOPE and TOKEN_SECRET_KEY:
+    token = dbutils.secrets.get(TOKEN_SECRET_SCOPE, TOKEN_SECRET_KEY)   # durable (SP PAT)
+    print("Using secret-backed token for the external-model route.")
+else:
+    # Fallback: ephemeral notebook token -- the gateway route will 401 once it expires.
+    token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+    print("WARNING: using the ephemeral notebook token; the gateway route will fail auth "
+          "after this session ends. Set TOKEN_SECRET_SCOPE/KEY in config.py for a durable token.")
 
 existing = [e.name for e in w.serving_endpoints.list()]
 if GATEWAY_ENDPOINT not in existing:

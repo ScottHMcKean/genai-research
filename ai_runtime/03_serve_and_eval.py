@@ -43,7 +43,11 @@ print(f"test rows: {len(test_pd)} | zero-shot baseline on: {BASELINE_N}")
 
 # COMMAND ----------
 
-FT_VERSION = 1  # bump if you registered more than one version in 02
+# Load the latest registered version so a re-run of 02 is always what's evaluated/served.
+from mlflow.tracking import MlflowClient
+mlflow.set_registry_uri("databricks-uc")
+FT_VERSION = max(int(v.version) for v in MlflowClient().search_model_versions(f"name='{UC_MODEL}'"))
+print("Evaluating fine-tuned model version:", FT_VERSION)
 ft = mlflow.pyfunc.load_model(f"models:/{UC_MODEL}/{FT_VERSION}")
 ft_pred = ft.predict(test_pd[["note"]])["pred_severity"].tolist()
 ft_acc = accuracy_score(test_pd["severity"], ft_pred)

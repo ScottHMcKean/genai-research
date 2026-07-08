@@ -4,7 +4,8 @@
 # MAGIC
 # MAGIC Builds a **Delta-Sync** Vector Search index on `doc_chunks` using **managed
 # MAGIC embeddings** (`databricks-gte-large-en`). This is the retriever behind the custom
-# MAGIC RAG agent. Reuses the existing `vs` endpoint on the FEVM.
+# MAGIC RAG agent. Creates a dedicated `claims_vs` endpoint (from `config.VS_ENDPOINT`) if
+# MAGIC it doesn't exist yet.
 # MAGIC
 # MAGIC Showcases: serverless Vector Search, managed embeddings, Unity Catalog governance,
 # MAGIC automatic sync from a Delta table (CDF).
@@ -20,6 +21,14 @@ from config import CHUNKS_TABLE, VS_INDEX, VS_ENDPOINT, EMBED_MODEL
 from databricks.vector_search.client import VectorSearchClient
 
 vsc = VectorSearchClient(disable_notice=True)
+
+# Ensure the Vector Search endpoint exists (create + wait for ONLINE if missing).
+endpoints = [e.get("name") for e in vsc.list_endpoints().get("endpoints", [])]
+if VS_ENDPOINT not in endpoints:
+    print("Creating Vector Search endpoint:", VS_ENDPOINT)
+    vsc.create_endpoint_and_wait(name=VS_ENDPOINT, endpoint_type="STANDARD")
+else:
+    print("Vector Search endpoint exists:", VS_ENDPOINT)
 
 existing = [i.get("name") for i in vsc.list_indexes(name=VS_ENDPOINT).get("vector_indexes", [])]
 if VS_INDEX not in existing:

@@ -51,6 +51,7 @@ with mlflow.start_run(run_name="claims_rag_agent"):
     info = mlflow.pyfunc.log_model(
         name="agent",
         python_model="agent.py",
+        code_paths=["config.py"],   # agent.py imports config at serve time
         resources=resources,
         pip_requirements=[
             "mlflow",
@@ -71,11 +72,12 @@ print("Logged + registered:", info.model_uri)
 
 from databricks import agents
 
+# agents.deploy signature is deploy(model_name, model_version, ...) -- pass version positionally.
 deployment = agents.deploy(
     RAG_UC_MODEL,
-    version=info.registered_model_version,
+    info.registered_model_version,
     endpoint_name=RAG_ENDPOINT,
-    tags={"demo": "td_claims", "type": "custom_rag"},
+    tags={"demo": "claims", "type": "custom_rag"},
 )
 print("Deploying endpoint:", RAG_ENDPOINT)
 print("Review app / query URL will appear in the endpoint page once READY.")
