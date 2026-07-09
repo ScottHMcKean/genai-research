@@ -17,6 +17,9 @@ EMBED_MODEL = "databricks-gte-large-en"
 EMBED_DIM = 1024
 VS_ENDPOINT = "claims_vs"   # dedicated endpoint for the claims demo
 
+# UC function exposed as a tool to the Supervisor Agent (created in 00_setup)
+CLAIM_LOOKUP_FN = f"{CATALOG}.{SCHEMA}.claim_lookup"
+
 # Registered UC model + serving endpoint for the custom RAG agent
 RAG_UC_MODEL = f"{CATALOG}.{SCHEMA}.claims_rag_agent"
 RAG_ENDPOINT = "claims-rag-agent"

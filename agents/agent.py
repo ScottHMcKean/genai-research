@@ -5,6 +5,7 @@ handling guidelines) indexed in Databricks Vector Search, answered by a
 foundation model. Logged and deployed as a Databricks Model Serving endpoint.
 """
 import mlflow
+from mlflow.entities import SpanType
 from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import (
     ResponsesAgentRequest,
@@ -51,13 +52,18 @@ class ClaimsRAGAgent(ResponsesAgent):
             endpoint_name=VS_ENDPOINT, index_name=VS_INDEX
         )
 
+    @mlflow.trace(name="retrieve", span_type=SpanType.RETRIEVER)
     def _retrieve(self, query: str, k: int = 4):
         res = self.index.similarity_search(
             query_text=query,
             columns=["doc", "title", "chunk"],
             num_results=k,
         )
-        return res.get("result", {}).get("data_array", []) or []
+        rows = res.get("result", {}).get("data_array", []) or []
+        # Store the last call for local inspection (notebook testing / debugging).
+        # Not used at serve time; the MLflow RETRIEVER span captures it in production.
+        self._last_retrieve: dict = {"query": query, "k": k, "rows": rows}
+        return rows
 
     def predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse:
         user_msgs = [m for m in request.input if m.role == "user"]
@@ -72,6 +78,16 @@ class ClaimsRAGAgent(ResponsesAgent):
         ]
         resp = self.llm.invoke(messages)
         text = resp.content if hasattr(resp, "content") else str(resp)
+
+        # Append a structured sources footer so every caller can see
+        # exactly which documents were retrieved from Vector Search.
+        # Deduplicate by doc filename so the same file isn't listed twice.
+        if rows:
+            seen: set = set()
+            unique_rows = [r for r in rows if r[0] not in seen and not seen.add(r[0])]
+            sources = "\n".join(f"  \u2022 {r[1]} [{r[0]}]" for r in unique_rows)
+            text = f"{text}\n\n---\n**Retrieved sources:**\n{sources}"
+
         return ResponsesAgentResponse(
             output=[self.create_text_output_item(text=text, id="msg_1")]
         )

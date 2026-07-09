@@ -35,35 +35,47 @@ w = WorkspaceClient()
 
 # COMMAND ----------
 
+# DBTITLE 1,Cell 5
 from databricks.sdk.service.knowledgeassistants import (
     KnowledgeAssistant, KnowledgeSource, FilesSpec,
 )
+from databricks.sdk.errors import AlreadyExists, InvalidParameterValue
 
-ka = w.knowledge_assistants.create_knowledge_assistant(
-    knowledge_assistant=KnowledgeAssistant(
-        display_name="Claims Knowledge Assistant (demo)",
-        description="Answers claims policy and handling-guideline questions.",
-        instructions=(
-            "You are a claims assistant for a P&C insurer. Answer from the policy "
-            "wordings and claims-handling guidelines. Always cite the source document. "
-            "If the answer isn't in the docs, say so."
-        ),
+try:
+    ka = w.knowledge_assistants.create_knowledge_assistant(
+        knowledge_assistant=KnowledgeAssistant(
+            display_name="Claims Knowledge Assistant (demo)",
+            description="Answers claims policy and handling-guideline questions.",
+            instructions=(
+                "You are a claims assistant for a P&C insurer. Answer from the policy "
+                "wordings and claims-handling guidelines. Always cite the source document. "
+                "If the answer isn't in the docs, say so."
+            ),
+        )
     )
-)
+except AlreadyExists:
+    ka = next(
+        k for k in w.knowledge_assistants.list_knowledge_assistants()
+        if k.display_name == "Claims Knowledge Assistant (demo)"
+    )
 KA_ID, KA_NAME = ka.id, ka.name          # name == 'knowledge-assistants/<id>' (used as parent)
 print("KA:", KA_ID, "| endpoint:", ka.endpoint_name)
 
-src = w.knowledge_assistants.create_knowledge_source(
-    parent=KA_NAME,
-    knowledge_source=KnowledgeSource(
-        display_name="Claims policy & guideline docs",
-        description="Policy wordings and claims-handling guidelines.",
-        source_type="FILES",
-        files=FilesSpec(path=VOLUME_PATH),
-    ),
-)
+try:
+    src = w.knowledge_assistants.create_knowledge_source(
+        parent=KA_NAME,
+        knowledge_source=KnowledgeSource(
+            display_name="Claims policy & guideline docs",
+            description="Policy wordings and claims-handling guidelines.",
+            source_type="FILES",
+            files=FilesSpec(path=VOLUME_PATH),
+        ),
+    )
+    print("Knowledge source added:", src.id)
+except InvalidParameterValue:
+    print("Knowledge source already exists, skipping create")
 w.knowledge_assistants.sync_knowledge_sources(name=KA_NAME)
-print("Knowledge source added + sync triggered:", src.id)
+print("Sync triggered")
 
 # COMMAND ----------
 
@@ -72,18 +84,11 @@ print("Knowledge source added + sync triggered:", src.id)
 
 # COMMAND ----------
 
-# Distinct name from governance/'s claim_lookup so the two demos don't clobber each other.
-# Param is p_claim_id (not claim_id) to avoid shadowing the table column.
-CLAIM_LOOKUP_FN = f"{CATALOG}.{SCHEMA}.agent_claim_lookup"
-spark.sql(f"""
-CREATE OR REPLACE FUNCTION {CLAIM_LOOKUP_FN}(p_claim_id STRING)
-RETURNS TABLE(claim_id STRING, claim_type STRING, peril STRING, claim_status STRING,
-              severity STRING, claim_amount DOUBLE, paid_amount DOUBLE, region STRING)
-COMMENT 'Look up a single insurance claim by its claim_id (e.g. CLM-100001).'
-RETURN SELECT claim_id, claim_type, peril, claim_status, severity, claim_amount, paid_amount, region
-       FROM {CLAIMS_TABLE} WHERE claim_id = p_claim_id
-""")
-print("Created UC function:", CLAIM_LOOKUP_FN)
+# DBTITLE 1,UC function — claim_lookup (owned by 00_setup)
+# claim_lookup is created (idempotently) by 00_setup, which owns the function definition.
+# Import the canonical name from config so this cell stays in sync automatically.
+from config import CLAIM_LOOKUP_FN
+print("Using UC function:", CLAIM_LOOKUP_FN)
 
 # COMMAND ----------
 
@@ -94,42 +99,56 @@ print("Created UC function:", CLAIM_LOOKUP_FN)
 
 # COMMAND ----------
 
+# DBTITLE 1,Cell 9
 from databricks.sdk.service.supervisoragents import (
     SupervisorAgent, Tool, UcFunction,
     KnowledgeAssistant as SAKnowledgeAssistant,
 )
+from databricks.sdk.errors import AlreadyExists, ResourceAlreadyExists
 
-sup = w.supervisor_agents.create_supervisor_agent(
-    supervisor_agent=SupervisorAgent(
-        display_name="Claims Supervisor (demo)",
-        description="Routes claims questions to the right specialist agent.",
-        instructions=(
-            "Route policy / coverage / handling-procedure questions to the policy_docs "
-            "knowledge assistant. When the user asks to look up a specific claim by id "
-            "(e.g. CLM-100001) or its status/amount, use the claim_lookup function. "
-            "Combine both when a question needs policy context and claim facts."
-        ),
+try:
+    sup = w.supervisor_agents.create_supervisor_agent(
+        supervisor_agent=SupervisorAgent(
+            display_name="Claims Supervisor (demo)",
+            description="Routes claims questions to the right specialist agent.",
+            instructions=(
+                "Route policy / coverage / handling-procedure questions to the policy_docs "
+                "knowledge assistant. When the user asks to look up a specific claim by id "
+                "(e.g. CLM-100001) or its status/amount, use the claim_lookup function. "
+                "Combine both when a question needs policy context and claim facts."
+            ),
+        )
     )
-)
+except AlreadyExists:
+    sup = next(
+        s for s in w.supervisor_agents.list_supervisor_agents()
+        if s.display_name == "Claims Supervisor (demo)"
+    )
 SUP_NAME = sup.name
 print("Supervisor:", sup.supervisor_agent_id or sup.id, "| endpoint:", sup.endpoint_name)
 
-w.supervisor_agents.create_tool(
-    parent=SUP_NAME, tool_id="policy_docs",
-    tool=Tool(
-        tool_type="knowledge_assistant", name="policy_docs",
-        description="Policy wordings and claims-handling guidelines.",
-        knowledge_assistant=SAKnowledgeAssistant(knowledge_assistant_id=KA_ID),
-    ),
-)
-w.supervisor_agents.create_tool(
-    parent=SUP_NAME, tool_id="claim_lookup",
-    tool=Tool(
-        tool_type="uc_function", name="claim_lookup",
-        description="Look up a single claim's type, status, severity, and amounts by claim_id.",
-        uc_function=UcFunction(name=CLAIM_LOOKUP_FN),
-    ),
-)
+try:
+    w.supervisor_agents.create_tool(
+        parent=SUP_NAME, tool_id="policy_docs",
+        tool=Tool(
+            tool_type="knowledge_assistant", name="policy_docs",
+            description="Policy wordings and claims-handling guidelines.",
+            knowledge_assistant=SAKnowledgeAssistant(knowledge_assistant_id=KA_ID),
+        ),
+    )
+except (AlreadyExists, ResourceAlreadyExists):
+    pass
+try:
+    w.supervisor_agents.create_tool(
+        parent=SUP_NAME, tool_id="claim_lookup",
+        tool=Tool(
+            tool_type="uc_function", name="claim_lookup",
+            description="Look up a single claim's type, status, severity, and amounts by claim_id.",
+            uc_function=UcFunction(name=CLAIM_LOOKUP_FN),
+        ),
+    )
+except (AlreadyExists, ResourceAlreadyExists):
+    pass
 print("Tools attached: policy_docs (KA) + claim_lookup (UC function)")
 
 # COMMAND ----------
@@ -145,3 +164,7 @@ print("\nOpen Agent Bricks in the workspace to chat with the Supervisor, or quer
 print("mas-*-endpoint once it is ACTIVE. Example questions:")
 print("  • 'What is the procedure for a basement water damage claim?'  (→ KA)")
 print("  • 'Look up claim CLM-100001'                                  (→ claim_lookup)")
+
+# COMMAND ----------
+
+
