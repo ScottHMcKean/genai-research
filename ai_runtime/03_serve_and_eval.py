@@ -116,6 +116,28 @@ display(comparison)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## 3b · Populate traces — 10 triage examples
+# MAGIC
+# MAGIC Runs 10 sample notes through the fine-tuned model and the zero-shot LLM inside MLflow
+# MAGIC spans, so the Traces UI shows both paths side by side for the triage task.
+
+# COMMAND ----------
+
+user = spark.sql("SELECT current_user()").first()[0]
+mlflow.set_experiment(f"/Users/{user}/claims_triage")
+
+sample = test_pd.head(10)[["note", "severity"]].to_dict("records")
+for i, row in enumerate(sample, 1):
+    with mlflow.start_span(name=f"triage_{i:02d}") as span:
+        span.set_inputs({"note": row["note"]})
+        ft_p = ft.predict(pd.DataFrame([{"note": row["note"]}]))["pred_severity"].iloc[0]
+        zs_p = zshot(row["note"])
+        span.set_outputs({"fine_tuned": ft_p, "zero_shot": zs_p, "label": row["severity"]})
+print(f"Wrote 10 triage traces to /Users/{user}/claims_triage")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## 4 · (Optional) Deploy to Model Serving
 # MAGIC
 # MAGIC DistilBERT is small → CPU serving is fine and cheap. Set `DEPLOY = True` to create

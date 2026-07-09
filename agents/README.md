@@ -27,19 +27,26 @@ throughout.
 | # | Notebook | What it does |
 |---|----------|--------------|
 | 00 | `00_setup.py` | Checks the shared claims spine exists (run `fins_data/generate_data.py` first). |
-| 01 | `01_vector_search.py` | Builds a **Delta-Sync Vector Search index** on `doc_chunks` with managed embeddings (`databricks-gte-large-en`), reusing the `vs` endpoint. |
-| 02 | `02_custom_rag_agent.py` | Logs `agent.py` (a `ResponsesAgent`) with VS + FMAPI resources, registers to Unity Catalog, and **deploys a Model Serving endpoint** (`claims-rag-agent`). |
-| 03 | `03_agent_bricks.py` | Creates an **Agent Bricks Knowledge Assistant** over the docs, a **UC function** claim-lookup tool, and a **Supervisor Agent** that routes between them. |
+| 01 | `01_vector_search.py` | Creates the `claims_vs` endpoint if needed and builds a **Delta-Sync Vector Search index** on `doc_chunks` with managed embeddings (`databricks-gte-large-en`). |
+| 02 | `02_custom_rag_agent.py` | Logs `agent.py` (a `ResponsesAgent`), registers to Unity Catalog, **deploys a Model Serving endpoint**, and **populates 10 traces**. |
+| 03 | `03_agent_bricks.py` | Creates an **Agent Bricks Knowledge Assistant**, a **UC function** claim-lookup tool, and a **Supervisor Agent** that routes between them (+ 10 traces). |
 
-`agent.py` — the custom RAG agent (retrieve-then-generate: Vector Search → Claude Sonnet
-4.5, grounded + cited). Kept as a standalone file so `mlflow.pyfunc.log_model` can package it.
+`agent.py` — the custom RAG agent. It retrieves by calling the **managed Vector Search MCP
+server** (`/api/2.0/mcp/vector-search/{catalog}/{schema}`) as a tool, so the LLM decides when
+to search and the agent returns the intermediate tool-call steps (its "thinking") with the
+cited answer. Kept standalone so `mlflow.pyfunc.log_model(code_paths=["config.py"])` packages it.
+
+## Ship it as an app — [`app/`](app/README.md)
+
+`app/` deploys the **same agent as a Databricks App** (agents on Apps) via the bundle
+(`resources/agents_app.yml` → `claims_rag_app`), with a **custom streaming chat UI** that
+shows each Vector Search step and the answer. `databricks bundle run -t dev claims_rag_app`.
 
 ## Platform capabilities showcased
 
-Vector Search (serverless, managed embeddings, Delta Sync) · MLflow 3 `ResponsesAgent` ·
-Unity Catalog model registry · one-line agent deployment (`agents.deploy`) · Agent Bricks
-Knowledge Assistant + Supervisor · Unity Catalog functions as governed agent tools ·
-foundation-model APIs (Claude Sonnet 4.5).
+Vector Search via **managed MCP tool calling** · MLflow 3 `ResponsesAgent` + auto tracing ·
+Unity Catalog model registry · one-line `agents.deploy` · **agents on Databricks Apps** with
+a custom chat UI · Agent Bricks (KA + Supervisor) · UC functions as governed tools.
 
 ## Run it
 

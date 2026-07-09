@@ -154,6 +154,45 @@ print("Tools attached: policy_docs (KA) + claim_lookup (UC function)")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Populate traces — 10 questions through the Supervisor
+# MAGIC
+# MAGIC Run once the Supervisor endpoint is ACTIVE (provisioning takes a few minutes). Each
+# MAGIC query routes across the KA + claim-lookup tools and lands as a trace / inference log.
+
+# COMMAND ----------
+
+QUESTIONS = [
+    "What is the procedure for a basement water damage claim?",
+    "Is sewer backup covered under the homeowners policy?",
+    "When can a glass-only auto claim be settled without an inspection?",
+    "What fraud indicators require a Special Investigations Unit referral?",
+    "What triggers escalation to a senior adjuster?",
+    "How are Additional Living Expenses handled after a house fire?",
+    "Look up claim CLM-100001.",
+    "What is the status and amount of claim CLM-100050?",
+    "What is the catastrophe (CAT) response procedure?",
+    "How is a stolen financed vehicle settled?",
+]
+try:
+    from openai import OpenAI
+    tok = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+    base = f"https://{spark.conf.get('spark.databricks.workspaceUrl')}/serving-endpoints"
+    oai = OpenAI(api_key=tok, base_url=base)
+    ok = 0
+    for i, q in enumerate(QUESTIONS, 1):
+        try:
+            oai.responses.create(model=sup.endpoint_name,
+                                 input=[{"role": "user", "content": q}])
+            ok += 1
+        except Exception as e:
+            print(f"[{i:02d}] skipped: {str(e)[:80]}")
+    print(f"Sent {ok}/{len(QUESTIONS)} questions through {sup.endpoint_name}.")
+except Exception as e:
+    print("Skipped trace population (endpoint likely still provisioning):", str(e)[:120])
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Summary — provision takes a few minutes
 
 # COMMAND ----------

@@ -17,7 +17,7 @@ open any use-case folder and run its notebooks `00 → 03`.
 | Folder | Use case | Showcases |
 |--------|----------|-----------|
 | [`fins_data/`](fins_data/README.md) | **Common data** (run first) | One script → synthetic claims (+PII), adjuster notes, knowledge docs, chunked VS source, real public insurance PDFs |
-| [`agents/`](agents/README.md) | **Agents** | Agent Bricks (Knowledge Assistant + Supervisor), Vector Search, MLflow `ResponsesAgent` custom RAG, model serving, UC-function tools |
+| [`agents/`](agents/README.md) | **Agents** | Agent Bricks (Knowledge Assistant + Supervisor), custom RAG agent (Vector Search via **MCP tool calling**), model serving, and the **same agent shipped as a Databricks App** ([`agents/app/`](agents/app/README.md)) with a streaming chat UI |
 | [`governance/`](governance/README.md) | **Governance** | Unity AI Gateway (usage, rate limits, **PII guardrails**, inference tables), managed + external MCP, lineage & cost observability |
 | [`ai_runtime/`](ai_runtime/README.md) | **AI Runtime** | Ray on serverless (fan-out + Ray Data), LoRA fine-tune on **serverless GPU** → UC model registry, fine-tuned vs zero-shot eval |
 | [`document_intelligence/`](document_intelligence/README.md) | **Document Intelligence** | `ai_parse_document` → `ai_extract` → MLflow evaluate over the common insurance PDFs |

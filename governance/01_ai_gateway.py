@@ -172,6 +172,41 @@ except Exception as e:
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## 3b · Populate traces / audit log — 10 questions through the gateway
+# MAGIC Sends 10 realistic claims questions so usage metrics and the inference table (below)
+# MAGIC have content, and the MLflow Traces UI shows governed gateway calls.
+
+# COMMAND ----------
+
+QUESTIONS = [
+    "What is the procedure for a basement water damage claim?",
+    "Is sewer backup covered under the homeowners policy?",
+    "When can a glass-only auto claim be settled without an inspection?",
+    "What fraud indicators require a Special Investigations Unit referral?",
+    "What triggers escalation to a senior adjuster?",
+    "How are Additional Living Expenses handled after a house fire?",
+    "What is the insured's duty to mitigate after water damage?",
+    "When should an auto claim be declared a total loss?",
+    "What is the catastrophe (CAT) response procedure?",
+    "How is a stolen financed vehicle settled?",
+]
+ok = 0
+for i, q in enumerate(QUESTIONS, 1):
+    try:
+        client.chat.completions.create(
+            model=GATEWAY_ENDPOINT,
+            messages=[{"role": "user", "content": q}],
+            max_tokens=200,
+        )
+        ok += 1
+    except Exception as e:
+        print(f"[{i:02d}] skipped: {str(e)[:80]}")
+print(f"Sent {ok}/{len(QUESTIONS)} questions through {GATEWAY_ENDPOINT} "
+      f"(usage + inference table populate asynchronously).")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## 4 · Where the audit trail lands
 # MAGIC Inference-table logging is asynchronous (a few minutes). Once populated, every
 # MAGIC request+response is a governed Delta row.
