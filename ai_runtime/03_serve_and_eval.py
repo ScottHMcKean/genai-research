@@ -57,6 +57,21 @@ print(f"Fine-tuned  -> accuracy {ft_acc:.3f} | macro-F1 {ft_f1:.3f}")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### Call the fine-tuned model directly — no serving endpoint needed
+# MAGIC `ft` is the loaded model artifact; predict on any note in-process.
+
+# COMMAND ----------
+
+demo_notes = pd.DataFrame({"note": [
+    "Multi-vehicle collision on the highway, driver hospitalized, vehicle a likely total loss.",
+    "Small hail dents on the hood, cosmetic only, vehicle drivable.",
+]})
+demo_notes["pred_severity"] = ft.predict(demo_notes)["pred_severity"]
+display(demo_notes)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## 2 · Zero-shot Foundation Model API baseline (same notes)
 
 # COMMAND ----------

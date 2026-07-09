@@ -85,6 +85,27 @@ print("Logged + registered:", info.model_uri, "v" + str(info.registered_model_ve
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Call the agent locally — no serving endpoint needed
+# MAGIC
+# MAGIC Load the **logged model artifact** and invoke it in-process. This runs the exact thing
+# MAGIC you'd deploy (Vector Search via MCP + LLM) using the notebook's own credentials, so you
+# MAGIC can demo / iterate without waiting ~15 min for a serving endpoint.
+
+# COMMAND ----------
+
+loaded = mlflow.pyfunc.load_model(info.model_uri)
+result = loaded.predict({"input": [{"role": "user",
+    "content": "A visitor slipped on icy steps and went to hospital. How should this claim be handled?"}]})
+for it in result["output"]:
+    if it.get("type") == "function_call":
+        print(f"  → tool call: {it['name']}({it['arguments']})")
+    elif it.get("type") == "message":
+        c = it["content"]
+        print("\n" + (c[0]["text"] if isinstance(c, list) else c))
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Deploy to Model Serving (~15 min to READY)
 
 # COMMAND ----------

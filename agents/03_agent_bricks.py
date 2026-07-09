@@ -154,6 +154,26 @@ print("Tools attached: policy_docs (KA) + claim_lookup (UC function)")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Call the Supervisor — no manual deployment
+# MAGIC
+# MAGIC Agent Bricks auto-hosts the Supervisor at `sup.endpoint_name`; you don't deploy
+# MAGIC anything. Once it's ACTIVE, query it directly (routes across the KA + claim_lookup).
+
+# COMMAND ----------
+
+from openai import OpenAI
+_tok = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+_oai = OpenAI(api_key=_tok, base_url=f"https://{spark.conf.get('spark.databricks.workspaceUrl')}/serving-endpoints")
+try:
+    r = _oai.responses.create(model=sup.endpoint_name,
+        input=[{"role": "user", "content": "What is the procedure for a basement water damage claim?"}])
+    print(r.output[-1].content[0].text if hasattr(r, "output") else r)
+except Exception as e:
+    print("Supervisor still provisioning (wait until ACTIVE), or:", str(e)[:150])
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Populate traces — 10 questions through the Supervisor
 # MAGIC
 # MAGIC Run once the Supervisor endpoint is ACTIVE (provisioning takes a few minutes). Each
