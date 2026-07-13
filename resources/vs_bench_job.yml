@@ -22,27 +22,27 @@ resources:
       tasks:
         - task_key: setup_data
           notebook_task:
-            notebook_path: ../vector_search/01_setup_data.py
-          timeout_seconds: 7200
+            notebook_path: ../vector_search/2a_setup_data.py
+          timeout_seconds: 18000  # 5h -- 1M embeddings per model via ai_query
 
         - task_key: setup_vs
           depends_on:
             - task_key: setup_data
           notebook_task:
-            notebook_path: ../vector_search/02_setup_vs.py
+            notebook_path: ../vector_search/2b_setup_vs.py
           timeout_seconds: 3600
 
         - task_key: setup_pg
           depends_on:
             - task_key: setup_data
           notebook_task:
-            notebook_path: ../vector_search/03_setup_pg.py
-          timeout_seconds: 5400
+            notebook_path: ../vector_search/2c_setup_pg.py
+          timeout_seconds: 14400  # 4h -- COPY 2.2M rows + HNSW on 1M vectors
 
         - task_key: benchmark
           depends_on:
             - task_key: setup_vs
             - task_key: setup_pg
           notebook_task:
-            notebook_path: ../vector_search/04_benchmark.py
+            notebook_path: ../vector_search/2d_benchmark.py
           timeout_seconds: 7200

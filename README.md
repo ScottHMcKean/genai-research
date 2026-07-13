@@ -4,6 +4,29 @@ Index of notebooks by topic. Most run on [Databricks Serverless](https://docs.da
 
 ---
 
+## FINS demo suite
+
+A cohesive demo suite on **one common Unity Catalog dataset** (financial-services /
+insurance claims — chosen only to illustrate the features). Each use case is its own
+folder of **notebooks you run in order** on serverless; a customer can lift a single
+folder, point `config.py` at their own data, and go.
+
+**Run order:** run `fins_data/generate_data.py` **once** to build the common dataset, then
+open any use-case folder and run its notebooks `00 → 03`.
+
+| Folder | Use case | Showcases |
+|--------|----------|-----------|
+| [`fins_data/`](fins_data/README.md) | **Common data** (run first) | One script → synthetic claims (+PII), adjuster notes, knowledge docs, chunked VS source, real public insurance PDFs |
+| [`agents/`](agents/README.md) | **Agents** | Agent Bricks (Knowledge Assistant + Supervisor), custom RAG agent (Vector Search via **MCP tool calling**), model serving, and the **same agent shipped as a Databricks App** ([`agents/app/`](agents/app/README.md)) with a streaming chat UI |
+| [`governance/`](governance/README.md) | **Governance** | Unity AI Gateway (usage, rate limits, **PII guardrails**, inference tables), managed + external MCP, lineage & cost observability |
+| [`ai_runtime/`](ai_runtime/README.md) | **AI Runtime** | Ray on serverless (fan-out + Ray Data), LoRA fine-tune on **serverless GPU** → UC model registry, fine-tuned vs zero-shot eval |
+| [`document_intelligence/`](document_intelligence/README.md) | **Document Intelligence** | `ai_parse_document` → `ai_extract` → MLflow evaluate over the common insurance PDFs |
+
+Everything runs as plain notebooks. Optional: `databricks bundle deploy -t dev` deploys
+each folder as a Job (see `resources/*.yml`) if you'd rather run them from the root.
+
+---
+
 ## Index
 
 ### AI functions (benchmarking & testing, incl. AI_QUERY and external models)

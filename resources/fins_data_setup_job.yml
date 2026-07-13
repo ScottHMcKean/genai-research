@@ -1,0 +1,26 @@
+# Shared claims spine -- the "build from scratch" step for the insurance demo suite.
+#
+# Deploy:  databricks bundle deploy -t dev
+# Run:     databricks bundle run -t dev fins_data_setup_job
+#
+# Idempotent: creates schema + volume, synthetic `claims` / `claim_notes` /
+# `doc_chunks` (CDF on) tables, and the knowledge docs. Run this first; the three
+# demo jobs build on it.
+
+resources:
+  jobs:
+    fins_data_setup_job:
+      name: "[FINS Data] Generate common demo dataset"
+      max_concurrent_runs: 1
+
+      environments:
+        - environment_key: serverless
+          spec:
+            client: "4"
+
+      tasks:
+        - task_key: setup_and_data
+          notebook_task:
+            notebook_path: ../fins_data/generate_data.py
+          environment_key: serverless
+          timeout_seconds: 1200

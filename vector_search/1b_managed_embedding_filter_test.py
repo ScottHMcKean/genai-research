@@ -17,7 +17,7 @@
 # MAGIC | Delta Sync (self-managed) | Fails (no endpoint) | Works | Pre-filter (standard) | Custom embeddings |
 # MAGIC | Direct Access | Fails (no endpoint) | Works | Pre-filter (standard) | Real-time upserts |
 # MAGIC
-# MAGIC **See also:** `01_self_managed_filter_test` for the self-managed embedding
+# MAGIC **See also:** `1a_self_managed_filter_test` for the self-managed embedding
 # MAGIC problem reproduction.
 
 # COMMAND ----------

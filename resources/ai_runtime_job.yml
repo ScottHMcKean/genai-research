@@ -1,0 +1,70 @@
+# AI Runtime & Fine-Tuning -- claims triage (Ray + LoRA).
+#
+# Deploy:  databricks bundle deploy -t dev
+# Run:     databricks bundle run -t dev ai_runtime_job
+#
+# NOTE: move this file into ../resources/ (alongside the other job ymls) so the bundle's
+#       `include: resources/*.yml` picks it up -- it's kept here next to the notebooks for
+#       readability. All notebooks are .py Databricks notebooks; notebook_task paths are
+#       given without extension (DAB imports .py source as a notebook).
+#
+# Compute:
+#   - 00 / 01 / 03  -> serverless, env client "5" (01 needs Ray, preinstalled on v5).
+#   - 02 (LoRA fine-tune) -> GPU. Two options below:
+#       (A) GPU job cluster (default here): single-node g5.xlarge (A10G).
+#       (B) serverless GPU: if enabled on the workspace, drop the job_cluster and give
+#           task 02 `environment_key: serverless_v5` like the others (the notebook
+#           auto-detects CUDA; it also runs on CPU as a last resort).
+
+resources:
+  jobs:
+    ai_runtime_job:
+      name: "[AI Runtime] Claims triage -- Ray fan-out + LoRA fine-tune"
+      max_concurrent_runs: 1
+
+      # NOTE: this workspace is serverless-only (no classic clusters), but serverless GPU
+      # (AI Runtime) IS available -- the LoRA fine-tune task requests an A10 via
+      # `compute.hardware_accelerator` below. The notebook auto-detects CUDA (full run on
+      # GPU) and falls back to a small capped CPU run if no GPU is available.
+      environments:
+        - environment_key: serverless_v5
+          spec:
+            client: "5"
+
+      tasks:
+        - task_key: setup
+          notebook_task:
+            notebook_path: ../ai_runtime/00_setup.py
+          environment_key: serverless_v5
+          timeout_seconds: 900
+
+        - task_key: ray_ai_runtime
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../ai_runtime/01_ray_ai_runtime.py
+          environment_key: serverless_v5
+          timeout_seconds: 3600
+
+        - task_key: finetune_lora
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../ai_runtime/02_finetune_lora.py
+          environment_key: serverless_v5
+          # Serverless GPU (AI Runtime). A10 = 24 GB, plenty for a DistilBERT LoRA.
+          # Requires the AI Runtime preview enabled in workspace admin settings, in a
+          # supported region (this FEVM is us-east-2 ✓). The notebook auto-detects CUDA
+          # and full-runs on GPU; it falls back to a capped CPU run if no GPU is available.
+          compute:
+            hardware_accelerator: GPU_1xA10
+          timeout_seconds: 3600
+
+        - task_key: serve_and_eval
+          depends_on:
+            - task_key: finetune_lora
+            - task_key: ray_ai_runtime
+          notebook_task:
+            notebook_path: ../ai_runtime/03_serve_and_eval.py
+          environment_key: serverless_v5
+          timeout_seconds: 1800

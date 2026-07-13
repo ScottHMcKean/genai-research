@@ -93,14 +93,17 @@ def endpoint_info(eps):
             spec.get("autoscaling_limit_min_cu"),
             spec.get("autoscaling_limit_max_cu"))
 
-def wait_active(dwell_checks=3, per_sleep=10, timeout=900):
-    """Wait until endpoint state is ACTIVE for `dwell_checks` consecutive polls."""
+def wait_ready(dwell_checks=3, per_sleep=10, timeout=900):
+    """Wait until endpoint state is ACTIVE or IDLE (host available, can accept
+    connections). Autoscaling endpoints settle into IDLE when suspended; the
+    first incoming connection wakes them up."""
+    READY = {"ACTIVE", "IDLE"}
     deadline = time.time() + timeout
     streak = 0
     last_host = None
     while time.time() < deadline:
         state, host, _, _ = endpoint_info(list_endpoints())
-        if state == "ACTIVE" and host:
+        if state in READY and host:
             last_host = host
             streak += 1
             if streak >= dwell_checks:
@@ -109,24 +112,29 @@ def wait_active(dwell_checks=3, per_sleep=10, timeout=900):
             streak = 0
             print(f"  endpoint state: {state}")
         time.sleep(per_sleep)
-    raise TimeoutError(f"Endpoint not ACTIVE (last={last_host})")
+    raise TimeoutError(f"Endpoint not ready (last={last_host})")
 
-host = wait_active()
+host = wait_ready()
 print(f"endpoint host: {host}")
 
-# Scale for the load -- only if the current range differs. Then wait for the
-# reconfiguration to settle before connecting (PATCH can transiently kill conns).
-_, _, cur_min, cur_max = endpoint_info(list_endpoints())
-if cur_min != 2.0 or cur_max != 16.0:
-    print(f"  patching CU range {cur_min}-{cur_max} -> 2.0-16.0")
+# status.autoscaling_limit_{min,max}_cu reflects the current applied range;
+# spec mirrors intent. Read from status since spec can be null on freshly
+# autoscaled endpoints.
+s, _, _, _ = endpoint_info(list_endpoints())
+eps = list_endpoints()
+status = eps[0].get("status", {}) if eps else {}
+cur_min = status.get("autoscaling_limit_min_cu")
+cur_max = status.get("autoscaling_limit_max_cu")
+if cur_min != 2 or cur_max != 16:
+    print(f"  patching CU range {cur_min}-{cur_max} -> 2-16")
     api.do(
         "PATCH", f"/api/2.0/postgres/{ENDPOINT_PATH}",
         query={"update_mask": "spec.autoscaling_limit_min_cu,spec.autoscaling_limit_max_cu"},
         body={"spec": {"autoscaling_limit_min_cu": 2.0, "autoscaling_limit_max_cu": 16.0}},
     )
     time.sleep(15)
-    host = wait_active()
-    print(f"  post-patch ACTIVE @ {host}")
+    host = wait_ready()
+    print(f"  post-patch ready @ {host}")
 else:
     print(f"  CU range already {cur_min}-{cur_max}, skipping patch")
 

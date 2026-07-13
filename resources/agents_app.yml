@@ -1,0 +1,28 @@
+# Claims RAG agent shipped as a Databricks App (agents on Apps) with a custom streaming
+# chat UI that shows the agent's Vector Search (MCP) tool-call steps + final answer.
+#
+# Deploy:  databricks bundle deploy -t dev
+#          databricks bundle run -t dev claims_rag_app     # starts/restarts the app
+#
+# The app runs as its own service principal; the resources below grant that SP access to
+# the LLM endpoint and the Vector Search index behind the managed MCP server.
+resources:
+  apps:
+    claims_rag_app:
+      name: "claims-rag-agent-app"
+      description: "Claims RAG assistant — Vector Search via MCP, streaming chat UI."
+      source_code_path: ../agents/app
+      resources:
+        - name: "llm"
+          serving_endpoint:
+            name: "databricks-claude-sonnet-4-5"
+            permission: "CAN_QUERY"
+        - name: "embedding"
+          serving_endpoint:
+            name: "databricks-gte-large-en"
+            permission: "CAN_QUERY"
+        - name: "vector_index"
+          uc_securable:
+            securable_full_name: "shm_skunkworks_catalog.claims_demo.doc_chunks_index"
+            securable_type: "TABLE"
+            permission: "SELECT"

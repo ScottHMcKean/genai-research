@@ -1,52 +1,26 @@
-# PII detection profiling -- multi-model sweep on a single A100 node.
-# Each task runs the same notebook with a different model_id parameter.
-# Tasks run sequentially because only one model fits in GPU memory at a time.
+# PII detection profiling -- multi-model vLLM sweep on a single A100 node.
 #
-# Deploy:  databricks bundle deploy -t dev
-# Run:     databricks bundle run -t dev pii_profiling_job
-
-resources:
-  jobs:
-    pii_profiling_job:
-      name: "[vLLM] PII detection profiling (multi-model)"
-      tasks:
-        - task_key: qwen3_4b
-          existing_cluster_id: 0309-232400-mqol8s67
-          notebook_task:
-            notebook_path: ../vllm/pii_detection_profiling.ipynb
-            base_parameters:
-              model_id: "Qwen/Qwen3-4B"
-              num_rows: "500"
-              max_tokens: "500"
-              output_catalog: "shm"
-              output_schema: "default"
-          timeout_seconds: 3600
-
-        - task_key: qwen3_8b
-          depends_on:
-            - task_key: qwen3_4b
-          existing_cluster_id: 0309-232400-mqol8s67
-          notebook_task:
-            notebook_path: ../vllm/pii_detection_profiling.ipynb
-            base_parameters:
-              model_id: "Qwen/Qwen3-8B"
-              num_rows: "500"
-              max_tokens: "500"
-              output_catalog: "shm"
-              output_schema: "default"
-          timeout_seconds: 3600
-
-        - task_key: qwen3_14b
-          depends_on:
-            - task_key: qwen3_8b
-          existing_cluster_id: 0309-232400-mqol8s67
-          notebook_task:
-            notebook_path: ../vllm/pii_detection_profiling.ipynb
-            base_parameters:
-              model_id: "Qwen/Qwen3-14B"
-              num_rows: "500"
-              max_tokens: "500"
-              output_catalog: "shm"
-              output_schema: "default"
-          timeout_seconds: 3600
-
+# DISABLED: this job requires a classic GPU (A100) cluster. The shm-skunkworks FEVM
+# is serverless-only ("Only serverless compute is supported"), and the previously
+# referenced cluster (0309-232400-mqol8s67) no longer exists, so this job cannot be
+# deployed or run here. The resource is commented out to keep `bundle deploy` clean.
+# To restore, run on a workspace that allows classic GPU clusters and re-add an
+# `existing_cluster_id` (or a `new_cluster` GPU spec) to each task.
+#
+# resources:
+#   jobs:
+#     pii_profiling_job:
+#       name: "[vLLM] PII detection profiling (multi-model)"
+#       tasks:
+#         - task_key: qwen3_4b
+#           existing_cluster_id: <A100_CLUSTER_ID>
+#           notebook_task:
+#             notebook_path: ../vllm/pii_detection_profiling.ipynb
+#             base_parameters:
+#               model_id: "Qwen/Qwen3-4B"
+#               num_rows: "500"
+#               max_tokens: "500"
+#               output_catalog: "shm"
+#               output_schema: "default"
+#           timeout_seconds: 3600
+#         # ... qwen3_8b, qwen3_14b (see git history for the full original)

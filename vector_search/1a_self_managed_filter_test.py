@@ -23,7 +23,7 @@
 # MAGIC | 6 | `scan_index` (no vector) | Yes -- but no server-side filtering |
 # MAGIC | 7 | SQL on source Delta table | Yes -- best option for exact-match lookups |
 # MAGIC
-# MAGIC **See also:** `02_managed_embedding_filter_test` for the managed embedding
+# MAGIC **See also:** `1b_managed_embedding_filter_test` for the managed embedding
 # MAGIC approach where `query_text` works natively.
 
 # COMMAND ----------
