@@ -274,4 +274,4 @@ ray.shutdown()
 # MAGIC ```
 # MAGIC
 # MAGIC Everything above the topology line is identical — Ray abstracts driver-local vs
-# MAGIC multi-node. See `ai_functions/les_miserables_ray.ipynb` for the cluster pattern.
+# MAGIC multi-node. See `ray/01_ray_basics_classic_cluster.ipynb` for the cluster pattern.

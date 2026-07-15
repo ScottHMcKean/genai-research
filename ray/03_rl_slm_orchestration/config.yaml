@@ -1,0 +1,19 @@
+# Top-level NeMo Gym config: points the policy model at the vLLM server that
+# notebook 01 stands up on AI Runtime (OpenAI-compatible endpoint serving Qwen3-4B).
+#
+# Chain in the environment/agent config:
+config_paths:
+  - resources_servers/banking_orchestration/configs/banking_orchestration.yaml
+
+# The policy model NeMo Gym drives. During RL, the trainer swaps in the live
+# vLLM endpoint whose weights it is updating; for eval/rollout smoke tests this
+# points at the vLLM server from notebook 01.
+policy_model:
+  responses_api_models:
+    openai_model:
+      # vLLM exposes an OpenAI-compatible API; base_url is printed by notebook 01.
+      policy_base_url: http://localhost:8000/v1
+      policy_api_key: EMPTY
+      policy_model_name: Qwen/Qwen3-4B     # ~3B-class Qwen3 (use Qwen3-1.7B for a lighter run)
+      max_tokens: 1024
+      temperature: 1.0                      # sampling on for RL exploration

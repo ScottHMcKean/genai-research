@@ -27,6 +27,23 @@ each folder as a Job (see `resources/*.yml`) if you'd rather run them from the r
 
 ---
 
+## Ray on Databricks — a guided walk
+
+A single narrative from **Ray basics → distributed inference → reinforcement learning**,
+so you can start on a classic cluster and end up training an SLM on AI Runtime. Full
+detail (talk track, compute, prerequisites) is in [`ray/README.md`](ray/README.md).
+
+| # | Notebook / folder | What it shows | Compute |
+|---|-------------------|---------------|---------|
+| 01 | [`ray/01_ray_basics_classic_cluster.ipynb`](ray/01_ray_basics_classic_cluster.ipynb) | **Basics** — spin up a Ray cluster on a **classic Spark cluster** (`setup_ray_cluster`), fan work out, watch memory/parallelism | Classic cluster |
+| 02 | [`ray/02_ray_external_model_inference.ipynb`](ray/02_ray_external_model_inference.ipynb) | **Inference** — task-based batch inference against an **external / OpenAI-compatible model** with Ray | Classic or serverless |
+| 03 | [`ray/03_rl_slm_orchestration/`](ray/03_rl_slm_orchestration/README.md) | **Reinforcement learning** — GRPO-train a Qwen3 SLM agent orchestrator with NeMo Gym on **AI Runtime + Ray** | Serverless GPU (AI Runtime) |
+
+Related Ray/AI-Runtime material lives in [`ai_runtime/`](ai_runtime/README.md) (Ray fan-out
++ Ray Data, LoRA fine-tune on serverless GPU, distributed training via `serverless_gpu`).
+
+---
+
 ## Index
 
 ### AI functions (benchmarking & testing, incl. AI_QUERY and external models)
@@ -35,9 +52,11 @@ each folder as a Job (see `resources/*.yml`) if you'd rather run them from the r
 | [ai_functions/les_mis_data_prep.ipynb](ai_functions/les_mis_data_prep.ipynb) |
 | [ai_functions/les_mis_endpoint_creation.ipynb](ai_functions/les_mis_endpoint_creation.ipynb) |
 | [ai_functions/les_miserables_aiquery.ipynb](ai_functions/les_miserables_aiquery.ipynb) |
-| [ai_functions/les_miserables_ray.ipynb](ai_functions/les_miserables_ray.ipynb) |
 | [ai_functions/les_miserables_spark.ipynb](ai_functions/les_miserables_spark.ipynb) |
-| [ai_functions/ray_external_model_les_mis.ipynb](ai_functions/ray_external_model_les_mis.ipynb) |
+
+> The two Ray notebooks that used to live here (`les_miserables_ray`,
+> `ray_external_model_les_mis`) moved into the dedicated [`ray/`](ray/README.md) walk-through
+> below.
 
 ### External models
 | Notebook |

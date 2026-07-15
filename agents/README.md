@@ -30,6 +30,7 @@ throughout.
 | 01 | `01_vector_search.py` | Creates the `claims_vs` endpoint if needed and builds a **Delta-Sync Vector Search index** on `doc_chunks` with managed embeddings (`databricks-gte-large-en`). |
 | 02 | `02_custom_rag_agent.py` | Logs `agent.py` (a `ResponsesAgent`), registers to Unity Catalog, **deploys a Model Serving endpoint**, and **populates 10 traces**. |
 | 03 | `03_agent_bricks.py` | Creates an **Agent Bricks Knowledge Assistant**, a **UC function** claim-lookup tool, and a **Supervisor Agent** that routes between them (+ 10 traces). |
+| 04 | `04_agent_bricks_monitoring.ipynb` | Monitors a deployed Agent Bricks / serving endpoint via **system tables** — `system.serving.served_entities`, `endpoint_usage`, and `system.billing.usage` for per-endpoint DBU cost. (Endpoint usage for Agent Bricks is roadmap; billing works today.) |
 
 `agent.py` — the custom RAG agent. It retrieves by calling the **managed Vector Search MCP
 server** (`/api/2.0/mcp/vector-search/{catalog}/{schema}`) as a tool, so the LLM decides when
