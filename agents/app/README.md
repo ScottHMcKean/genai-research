@@ -17,15 +17,18 @@ its result — and the final, cited answer.
 
 ## Run it
 
-Deploy via the bundle from the repo root (the app runs as its own service principal; the
-bundle grants it the LLM endpoint + the Vector Search index):
+Deploy as a Databricks App with the CLI (`databricks apps`). Create the app once, sync this
+folder, then deploy:
 
 ```bash
-databricks bundle deploy -t dev
-databricks bundle run   -t dev claims_rag_app
+databricks apps create claims-rag-agent          # once
+databricks sync . /Workspace/Users/<you>/claims-rag-agent
+databricks apps deploy claims-rag-agent --source-code-path /Workspace/Users/<you>/claims-rag-agent
 ```
 
-The command prints the app URL (`https://<app>.databricksapps.com`). Prerequisite: run
+`databricks apps list` prints the app URL (`https://<app>.databricksapps.com`). The app runs
+as its own service principal — grant that principal the LLM serving endpoint (`CAN QUERY`) and
+the Vector Search index (`USE` on catalog/schema + the index). Prerequisite: run
 `fins_data/generate_data.py` and `agents/01_vector_search.py` first so the index exists.
 
 ## How it works

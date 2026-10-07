@@ -56,12 +56,7 @@ runs on-platform under the same governance. Reserve the big LLM for open-ended r
 
 1. Run `fins_data/generate_data.py` once (builds the common data).
 2. Open this folder and run `00 → 03` in order. `02` uses **serverless GPU** (A10) — pick
-   the GPU accelerator in the notebook's Environment panel, or use the DAB job below which
-   requests it automatically.
+   the GPU accelerator in the notebook's Environment panel.
 
-Optional — deploy from the repo root as a Job instead:
-
-```bash
-databricks bundle deploy -t dev
-databricks bundle run -t dev ai_runtime_job
-```
+To run headless, build a multi-task Job from `00 → 03` in the Jobs UI (set the GPU
+accelerator on the `02` task), or `databricks jobs submit` against them.

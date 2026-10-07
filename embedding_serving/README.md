@@ -55,4 +55,5 @@ can be compared in one place (`shm_skunkworks_catalog.genai.embedding_bench_resu
 
 ## Prior art
 
-- Templates adapted from `custom_models/hf_embedding_serving_air.py` and `custom_models/hf_chat_serving_air.py`.
+- Serving templates adapted from the HuggingFace embedding/chat serving-on-AI-Runtime
+  patterns (`hf_embedding_serving_air.py` / `hf_chat_serving_air.py`).

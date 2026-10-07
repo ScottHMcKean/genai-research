@@ -46,9 +46,5 @@ Run **`fins_data/generate_data.py`** once — it builds
 1. Run `fins_data/generate_data.py` once (builds the common data).
 2. Open this folder and run `00 → 03` in order on serverless.
 
-Optional — deploy from the repo root as a Job instead:
-
-```bash
-databricks bundle deploy -t dev
-databricks bundle run -t dev governance_job
-```
+To run headless, build a multi-task Job from `00 → 03` in the Jobs UI, or `databricks jobs
+submit` against them.
