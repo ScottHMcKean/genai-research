@@ -15,9 +15,10 @@ Deploys the Monte Carlo forecasting agent as a chat app where each forecaster se
 - **History is pinned to the caller.** `GET /api/history` runs exactly one
   `search_traces` with `filter_string` fixed to the authenticated user. There is no
   parameter a client could set to read another user's traces.
-- **The data layer enforces the same rule.** The UC row filter from the notebook means
-  even a direct SQL query against the trace table only returns the caller's rows —
-  so isolation doesn't depend on this app being well-behaved.
+- **The data layer enforces the same rule for direct SQL.** The UC secure view from the
+  notebook (`…_my_spans`) returns only the caller's own traces to `current_user()`. Grant
+  analysts/BI the **view**, not the base `_otel_spans` table. (The app's own history is
+  enforced at the app layer above — the view is the guarantee for direct SQL / BI access.)
 
 ## Endpoints
 
@@ -56,7 +57,9 @@ inlines already belongs to them.
 - Grant the app's service principal:
   - `CAN_QUERY` on the `databricks-claude-sonnet-4-5` serving endpoint,
   - `EDIT` (write traces) on the experiment,
-  - `SELECT` on the trace table if you want the row filter to also gate the app's reads.
+  - `CAN_USE` on the SQL warehouse and `SELECT, MODIFY` on the `…_otel_*` trace tables
+    (write + read traces via `search_traces`),
+  - `READ VOLUME, WRITE VOLUME` on the artifacts volume (chart persistence).
 
 ## Run locally
 

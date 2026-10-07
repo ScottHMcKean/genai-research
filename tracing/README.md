@@ -9,7 +9,7 @@ actually matter in production stay in focus:
 | **a** | Framework **autolog** + a manual tool span | `mlflow.openai.autolog()` + `@mlflow.trace(span_type=TOOL)` |
 | **b** | Traces are **OpenTelemetry** and land in **Unity Catalog** | `mlflow.set_experiment(trace_location=UnityCatalog(...))` |
 | **c** | Retrieve traces as **conversation history** (users + sessions) | `mlflow.search_traces(filter_string="metadata.\`mlflow.trace.user\` = …")` |
-| **d** | **Governance** — a user only sees traces they made | app pins the filter to the caller **+** a UC **row filter** on the trace table |
+| **d** | **Governance** — a user only sees traces they made | app pins the filter to the caller **+** a trace-scoped UC **secure view** for direct SQL |
 
 ## Use case
 
@@ -39,8 +39,12 @@ to a UC trace location they **are** governed Delta tables. So you don't build a
 separate chat-history database and you don't build a separate access-control layer:
 
 - **History** is a `search_traces` filtered by user + session.
-- **Isolation** is a Unity Catalog row filter on the trace table — enforced at the
-  data layer, so it holds even for a direct SQL query, not just the app.
+- **Isolation** has two layers. In the app it's enforced at the **app layer** — every
+  history query is pinned to the authenticated caller. For direct SQL / BI access it's a
+  trace-scoped **Unity Catalog secure view** (`…_my_spans`): resolve each trace's owner
+  from its root span, return only the traces `current_user()` owns. Grant users the
+  **view**, not the base table — the base `_otel_spans` table is not itself row-filtered
+  (a per-row filter can't scope by trace, since the user is only on the root span).
 
 ## Run it
 
@@ -55,19 +59,21 @@ separate chat-history database and you don't build a separate access-control lay
 - **Traces tab** — each `forecast_turn` has an `LLM` span, a `monte_carlo_simulation`
   `TOOL` span, and a second `LLM` span, tagged with user + session.
 - **Sessions tab** — Alice's 3 turns and Bob's 2 turns each group into one session.
-- **Catalog** — `{catalog}.{schema}.forecast_traces_otel_spans` is a queryable,
-  governed Delta table with a row filter attached.
+- **Catalog** — `{catalog}.{schema}.forecast_traces_otel_spans` is a queryable, governed
+  Delta table; `…_my_spans` is the trace-scoped secure view over it.
 
 ## Notes
 
-- **Column names in the trace table are platform-versioned.** The notebook `DESCRIBE`s
-  the spans table before the row filter keys off `trace_metadata['mlflow.trace.user']`;
-  adjust the expression to match your build.
+- **The user is on the root span only.** MLflow exports `mlflow.trace.user` to the OTel
+  attribute `user.id` (session → `session.id`) inside the `attributes` VARIANT, and only
+  on each trace's root span. The `_otel_spans` table is per-span, so the secure view
+  resolves each trace's owner from its root span and returns all spans of owned traces.
+  Column layout is platform-versioned — the notebook `DESCRIBE`s the table first.
 - **Binding UC trace location is one-shot** — it only attaches to an experiment with no
   traces yet. Use a fresh experiment name or set it from the Experiment UI on re-runs.
 - **User identity must be set explicitly.** Under app auth the workspace identity is the
   service principal, so the app forwards the *authenticated end user* into
-  `mlflow.trace.user` — that's what the row filter and the history filter key on.
+  `mlflow.trace.user` — that's what the secure view and the history filter key on.
 - Related: [`../mlflow/`](../mlflow/README.md) covers the full eval lifecycle (judges,
   datasets, prompt registry); [`../agents/`](../agents/README.md) covers Agent Bricks +
   a custom RAG agent. This folder is the tracing/governance slice.

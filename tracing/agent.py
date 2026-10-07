@@ -182,7 +182,7 @@ class ForecastChatAgent(ResponsesAgent):
 
         Session metadata is immutable once set, so do this before any child span.
         The app passes the authenticated end-user's email as `user` — that identity
-        is what the row filter in `01_custom_agent_tracing.py` keys on."""
+        is what the secure view in `01_custom_agent_tracing.py` keys on."""
         ci = request.custom_inputs or {}
         meta = {}
         if ci.get("user"):

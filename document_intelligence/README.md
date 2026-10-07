@@ -32,15 +32,10 @@ Run on **serverless** (env 5), in order:
 insurance PDFs into `raw_pdfs` in the common schema. All config (catalog/schema) is in
 `config.py`; point it at your own catalog/schema to run on your documents.
 
-## Optional: deploy from root as a job
+## Optional: run headless
 
-The suite ships a Declarative Automation Bundle. To run this flow as a job instead of
-interactively:
-
-```bash
-databricks bundle deploy -t dev
-databricks bundle run   -t dev document_intelligence_job
-```
+To run this flow non-interactively, build a multi-task Job from these notebooks in the Jobs
+UI (`00 → 03`, serverless), or `databricks jobs submit` against them.
 
 ## Data & labels
 

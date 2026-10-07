@@ -13,7 +13,7 @@
 # MAGIC | **a** | Framework autolog + a tool span | `mlflow.openai.autolog()` + `@mlflow.trace` on the simulation |
 # MAGIC | **b** | Traces are OpenTelemetry and land in **Unity Catalog** | bind the experiment to a UC trace location; spans become governed Delta tables |
 # MAGIC | **c** | Retrieve traces as **conversation history** | `search_traces` filtered by `mlflow.trace.user` / `mlflow.trace.session` |
-# MAGIC | **d** | **Governance**: a user only sees traces they made | app pins the filter to the caller **+** a UC **row filter** on the trace table |
+# MAGIC | **d** | **Governance**: a user only sees traces they made | app pins the filter to the caller **+** a trace-scoped UC **secure view** for direct SQL |
 # MAGIC
 # MAGIC ### Requirements
 # MAGIC - MLflow 3 (`mlflow>=3.1`), `databricks-openai`, `databricks-agents`.

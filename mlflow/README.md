@@ -112,8 +112,6 @@ Docs: [Production monitoring](https://docs.databricks.com/aws/en/mlflow3/genai/e
   `run_turn` session helper
 - [`eval_questions.py`](eval_questions.py) — eight seed research questions with
   expected arXiv IDs and facts
-- [`../resources/mlflow_job.yml`](../resources/mlflow_job.yml)
-  — Databricks Asset Bundle job definition
 
 ## Prerequisites
 
@@ -134,10 +132,8 @@ Docs: [Production monitoring](https://docs.databricks.com/aws/en/mlflow3/genai/e
    URL, label a few traces, then continue.
 
 ### As a scheduled job
-```bash
-databricks bundle deploy -t dev
-databricks bundle run -t dev mlflow_job
-```
+Create a Job from `arxiv_eval_walkthrough.ipynb` in the Jobs UI (serverless), or
+`databricks jobs submit` against it.
 
 ## REST API walkthrough (non-Python frameworks)
 

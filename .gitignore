@@ -9,3 +9,6 @@ scratch/**
 mlruns/
 .DS_Store
 .claude/
+.cursor/
+.ai-dev-kit/
+.isaac/

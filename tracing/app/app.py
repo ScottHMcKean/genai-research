@@ -6,8 +6,8 @@ What this app demonstrates (sections c + d of ../01_custom_agent_tracing.py):
   user** (from the Apps identity header) and the chat session id.
 - `GET /api/history` reconstructs a user's past conversations with
   `mlflow.search_traces` — and pins the filter to the caller, so a user can only
-  ever retrieve their own traces. The Unity Catalog row filter in the notebook
-  enforces the same rule at the data layer as defence in depth.
+  ever retrieve their own traces. The Unity Catalog secure view in the notebook
+  (`…_my_spans`) enforces the same rule at the data layer for direct SQL / BI access.
 
 Identity: Databricks Apps forwards the signed-in user on `X-Forwarded-Email`
 (and `X-Forwarded-Preferred-Username`). We trust those headers, never a user id

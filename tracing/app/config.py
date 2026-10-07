@@ -20,7 +20,7 @@ TRACE_SPANS_TABLE = f"{CATALOG}.{SCHEMA}.{TRACE_TABLE_PREFIX}_otel_spans"
 # experiment to a UC trace location (set as MLFLOW_TRACING_SQL_WAREHOUSE_ID).
 SQL_WAREHOUSE_ID = "505ec857e6b4ea23"
 
-# Group that always sees every trace (row-filter bypass for admins/auditors).
+# Group that always sees every trace (secure-view bypass for admins/auditors).
 TRACE_ADMIN_GROUP = "trace-admins"
 
 # Registered UC model + serving endpoint if you deploy the agent.

@@ -7,6 +7,8 @@ claims spine. Two complementary approaches, side by side:
    created entirely in code via the Databricks SDK.
 2. **A custom RAG agent** — an MLflow `ResponsesAgent` over Vector Search, deployed to
    Model Serving. Full control when you need it.
+3. **The Supervisor API (Beta)** — the programmatic middle ground, plus a notebook (`05`)
+   that validates what it does and doesn't manage for you (spoiler: not session memory).
 
 All on synthetic P&C claims data (no real customer data). Insurance & claims themed
 throughout.
@@ -31,6 +33,7 @@ throughout.
 | 02 | `02_custom_rag_agent.py` | Logs `agent.py` (a `ResponsesAgent`), registers to Unity Catalog, **deploys a Model Serving endpoint**, and **populates 10 traces**. |
 | 03 | `03_agent_bricks.py` | Creates an **Agent Bricks Knowledge Assistant**, a **UC function** claim-lookup tool, and a **Supervisor Agent** that routes between them (+ 10 traces). |
 | 04 | `04_agent_bricks_monitoring.ipynb` | Monitors a deployed Agent Bricks / serving endpoint via **system tables** — `system.serving.served_entities`, `endpoint_usage`, and `system.billing.usage` for per-endpoint DBU cost. (Endpoint usage for Agent Bricks is roadmap; billing works today.) |
+| 05 | `05_supervisor_api_sessions.py` | **Does the Supervisor API have session memory?** Nine probes that empirically test the docs' claim that it *"doesn't store conversation state between requests"* — stateless control, client-replayed history, `previous_response_id`, `store`/`retrieve`, the two-turn client-function round trip, background mode, **background mode with MCP approval**, a `SupervisorSession` wrapper, and MLflow session grouping. Prints a pass/fail scorecard. Standalone (Beta previews only). |
 
 `agent.py` — the custom RAG agent. It retrieves by calling the **managed Vector Search MCP
 server** (`/api/2.0/mcp/vector-search/{catalog}/{schema}`) as a tool, so the LLM decides when
@@ -39,9 +42,9 @@ cited answer. Kept standalone so `mlflow.pyfunc.log_model(code_paths=["config.py
 
 ## Ship it as an app — [`app/`](app/README.md)
 
-`app/` deploys the **same agent as a Databricks App** (agents on Apps) via the bundle
-(`resources/agents_app.yml` → `claims_rag_app`), with a **custom streaming chat UI** that
-shows each Vector Search step and the answer. `databricks bundle run -t dev claims_rag_app`.
+`app/` deploys the **same agent as a Databricks App** (agents on Apps), with a **custom
+streaming chat UI** that shows each Vector Search step and the answer. See
+[`app/README.md`](app/README.md) for deployment.
 
 ## Platform capabilities showcased
 
@@ -54,12 +57,8 @@ a custom chat UI · Agent Bricks (KA + Supervisor) · UC functions as governed t
 1. Run `fins_data/generate_data.py` once (builds the common data).
 2. Open this folder and run `00 → 03` in order on serverless.
 
-Optional — deploy from the repo root as a Job instead:
-
-```bash
-databricks bundle deploy -t dev
-databricks bundle run -t dev agents_job
-```
+To run headless, build a multi-task Job from `00 → 03` in the Jobs UI, or `databricks jobs
+submit` against them.
 
 ## Notes
 
@@ -73,3 +72,8 @@ databricks bundle run -t dev agents_job
   Supervisor's structured-data tool through a UC function instead.)
 - The KA and Supervisor take a few minutes to provision to `ACTIVE`; the custom RAG
   serving endpoint takes ~15 minutes to reach `READY`.
+- **Supervisor API sessions**: notebook `05` is standalone and *not* in `agents_job` — it
+  needs the **Unity AI Gateway** and (for its tracing probe) **UC OTel traces** previews
+  enabled. Headline finding: the Supervisor API manages the agent loop *within* a request
+  but keeps no conversation state *between* requests, so the transcript is the client's to
+  hold and replay.

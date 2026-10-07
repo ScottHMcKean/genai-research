@@ -5,8 +5,8 @@ use-case demo reads from. Run it once, then run any use case. Idempotent — saf
 
 ## Run it
 
-Open `generate_data.py` and **Run all** on serverless (no cluster needed). Or, optionally,
-as a job: `databricks bundle run -t dev fins_data_setup_job`.
+Open `generate_data.py` and **Run all** on serverless (no cluster needed). To run it
+headless, create a single-task Job from it in the Jobs UI (or `databricks jobs submit`).
 
 ## What it creates (`shm_skunkworks_catalog.claims_demo`)
 
