@@ -77,6 +77,16 @@ by_metric AS (
 ),
 datamap AS (
   SELECT map_from_entries(collect_list(struct(scenario AS k, mmap AS v))) AS m FROM by_metric
+),
+-- Metadata over the ROWS ACTUALLY RETURNED (agg = post-cap), so retrieval mode never
+-- advertises scenarios/metrics/steps that the row cap dropped from `data`. Aggregates with
+-- no GROUP BY yield exactly one row even when agg is empty, so the CROSS JOIN below is safe.
+ret_meta AS (
+  SELECT sort_array(collect_set(scenario)) AS scenarios_ret,
+         sort_array(collect_set(metric))   AS metrics_ret,
+         min(step) AS step_min_ret, max(step) AS step_max_ret,
+         count(*)  AS rows_returned
+  FROM agg
 )
 SELECT CASE
   WHEN s.total_matching = 0 THEN
@@ -97,12 +107,13 @@ SELECT CASE
     to_json(named_struct(
       'record_type', 'read_sim_result', 'tool_name', 'read_sim', 'discovery_mode', false,
       'requested_run_ids', run_ids,
-      'scenarios', s.scenarios_found, 'metrics', s.metrics_found,
-      'step_min', s.step_min_found, 'step_max', s.step_max_found,
-      'total_matching', s.total_matching, 'row_limit', s.row_limit,
+      'scenarios', rm.scenarios_ret, 'metrics', rm.metrics_ret,
+      'step_min', rm.step_min_ret, 'step_max', rm.step_max_ret,
+      'total_matching', s.total_matching, 'rows_returned', rm.rows_returned,
+      'row_limit', s.row_limit, 'capped', s.total_matching > rm.rows_returned,
       'steps', (SELECT steps_arr FROM steps),
       'data_layout', 'data[scenario][metric] = array of values aligned to the steps array.',
       'data', (SELECT m FROM datamap),
       'message', 'Retrieval mode: data is nested scenario -> metric -> values aligned to the steps array.'))
   END
-FROM stats s
+FROM stats s CROSS JOIN ret_meta rm

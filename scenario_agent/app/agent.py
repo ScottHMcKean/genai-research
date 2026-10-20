@@ -21,9 +21,13 @@ This is a *reference* implementation: it fixes two things the source notebook go
 
 Kept standalone so `log_model(code_paths=["config.py"])` packages it and the Databricks App
 in `app/` can `from agent import AGENT`.
+
+NOTE: `app/agent.py` is a byte-identical copy so the App bundle is self-contained; after
+editing this file, regenerate it with `cp agent.py app/agent.py`.
 """
 import concurrent.futures
 import json
+import threading
 import uuid
 from typing import Any, Callable, Generator
 
@@ -128,6 +132,7 @@ class ScenarioAgent(ResponsesAgent):
         self._ws = None
         self._tool_specs_cache: list[dict] | None = None
         self._tool_client: dict[str, Any] = {}  # tool name -> MCP client (routing map)
+        self._init_lock = threading.Lock()      # guards the one-time tool discovery
 
     # ---- Databricks / MCP plumbing -------------------------------------------------
     def _workspace(self):
@@ -145,23 +150,28 @@ class ScenarioAgent(ResponsesAgent):
     def _tool_specs(self) -> list[dict]:
         """List tools from every MCP server once; cache the specs and a name->client map.
 
-        This map is deterministic configuration (not per-request state), so caching it on
-        the instance is safe under concurrency."""
+        This map is deterministic configuration (not per-request state). The one-time build
+        is guarded by a lock (double-checked) and the routing map is assigned atomically, so
+        concurrent first requests never read a half-populated map."""
         if self._tool_specs_cache is None:
-            specs: list[dict] = []
-            for path in MCP_PATHS:
-                client = self._mcp_client(path)
-                for t in _sync(client.list_tools):
-                    specs.append({
-                        "type": "function",
-                        "function": {
-                            "name": t.name,
-                            "description": t.description or "",
-                            "parameters": t.inputSchema,
-                        },
-                    })
-                    self._tool_client[t.name] = client
-            self._tool_specs_cache = specs
+            with self._init_lock:
+                if self._tool_specs_cache is None:
+                    specs: list[dict] = []
+                    client_map: dict[str, Any] = {}
+                    for path in MCP_PATHS:
+                        client = self._mcp_client(path)
+                        for t in _sync(client.list_tools):
+                            specs.append({
+                                "type": "function",
+                                "function": {
+                                    "name": t.name,
+                                    "description": t.description or "",
+                                    "parameters": t.inputSchema,
+                                },
+                            })
+                            client_map[t.name] = client
+                    self._tool_client = client_map          # atomic publish
+                    self._tool_specs_cache = specs
         return self._tool_specs_cache
 
     @mlflow.trace(span_type=SpanType.TOOL)

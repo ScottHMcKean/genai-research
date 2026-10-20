@@ -21,6 +21,7 @@ import pathlib
 
 import mlflow
 from databricks.sdk import WorkspaceClient
+from mlflow.entities import SpanType
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from mlflow.tracking import MlflowClient
@@ -108,6 +109,7 @@ async def api_tool_call(req: Request) -> JSONResponse:
     body = await req.json()
     name = body.get("name")
     args = body.get("args") or {}
+    last_err = None
     for path in MCP_PATHS:
         try:
             client = _mcp(path)
@@ -115,8 +117,11 @@ async def api_tool_call(req: Request) -> JSONResponse:
                 res = _sync(client.call_tool, name, args)
                 raw = "".join(getattr(c, "text", "") for c in res.content)
                 return JSONResponse({"name": name, "server": HOST + path, "raw": raw})
-        except Exception as e:
-            return JSONResponse({"error": f"{type(e).__name__}: {e}"}, status_code=500)
+        except Exception as e:  # don't give up — the tool may live on another server
+            last_err = f"{type(e).__name__}: {e}"
+            continue
+    if last_err:
+        return JSONResponse({"error": last_err}, status_code=500)
     return JSONResponse({"error": f"tool '{name}' not found on any MCP server"}, status_code=404)
 
 
@@ -153,16 +158,22 @@ async def chat(req: Request) -> StreamingResponse:
     session_id = body.get("session_id") or "web"
 
     def event_stream():
-        try:
-            for ev in AGENT.predict_stream(ResponsesAgentRequest(
-                input=messages, custom_inputs={"user": user, "session_id": session_id},
-            )):
-                item = ev.item
-                if not isinstance(item, dict):
-                    item = item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else dict(item)
-                yield f"data: {json.dumps(item)}\n\n"
-        except Exception as e:  # surface errors to the UI instead of a dead stream
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        # Open an explicit root span for the turn. Served models get an auto root span, but
+        # here the agent runs in-process, so without this the user/session tags (and the
+        # autologged LLM calls) would have no single trace to attach to.
+        with mlflow.start_span(name="chat_turn", span_type=SpanType.AGENT):
+            mlflow.update_current_trace(
+                metadata={"mlflow.trace.user": user, "mlflow.trace.session": session_id})
+            try:
+                for ev in AGENT.predict_stream(ResponsesAgentRequest(
+                    input=messages, custom_inputs={"user": user, "session_id": session_id},
+                )):
+                    item = ev.item
+                    if not isinstance(item, dict):
+                        item = item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else dict(item)
+                    yield f"data: {json.dumps(item)}\n\n"
+            except Exception as e:  # surface errors to the UI instead of a dead stream
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
