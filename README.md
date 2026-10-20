@@ -48,6 +48,11 @@ agent end to end: framework autolog, OpenTelemetry traces stored in **Unity Cata
 conversation history from traces, and per-user **governance**, shipped as a Databricks App.
 See [`tracing/WIRING.md`](tracing/WIRING.md) for the components/queries/latencies reference.
 
+**Agents, production-shaped** — [`scenario_agent/`](scenario_agent/README.md) is a small custom
+agent built the current way: **governed Unity Catalog SQL functions + Vector Search RAG reached
+through managed MCP servers**, served **in-process on a Databricks App** (no always-on serving
+endpoint), and gated with `mlflow.genai.evaluate`. Fully synthetic, with unit tests.
+
 ---
 
 ## Observability & gateway

@@ -1,0 +1,47 @@
+# Folder-scoped Databricks Asset Bundle for the scenario-simulation agent.
+# Independent of the repo (the repo ships no root bundle) — deploy from this folder:
+#   databricks bundle validate --strict -t dev --profile <PROFILE>
+#   databricks bundle deploy            -t dev --profile <PROFILE>
+#   databricks bundle run scenario_setup -t dev --profile <PROFILE>   # builds data + evals
+# Catalog/schema/model are configured in config.py (the single source of truth the
+# notebooks and agent import); this bundle just packages the job + the App.
+bundle:
+  name: scenario_agent
+
+resources:
+  jobs:
+    scenario_setup:
+      name: scenario_agent-setup-${bundle.target}
+      tasks:
+        - task_key: setup
+          notebook_task:
+            notebook_path: ./00_setup.py
+        - task_key: evaluate
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ./01_evaluate.py
+      queue:
+        enabled: true
+
+  apps:
+    scenario_agent:
+      name: scenario-agent-${bundle.target}
+      source_code_path: ./app
+      description: Scenario-simulation chat agent, served in-process on Databricks Apps.
+      resources:
+        - name: llm
+          serving_endpoint:
+            name: databricks-claude-sonnet-4-5
+            permission: CAN_QUERY
+        - name: embed
+          serving_endpoint:
+            name: databricks-gte-large-en
+            permission: CAN_QUERY
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production

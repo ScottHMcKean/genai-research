@@ -1,0 +1,9 @@
+# Local dev + notebook dependencies (the deployed App uses app/requirements.txt).
+# Pruned to what this folder actually imports — no langchain/langgraph.
+mlflow>=3.2
+databricks-sdk[openai]
+databricks-openai
+databricks-mcp
+mcp
+pydantic>=2
+pytest

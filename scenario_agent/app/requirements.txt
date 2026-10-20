@@ -1,0 +1,7 @@
+mlflow>=3.2
+databricks-mcp
+databricks-openai
+databricks-sdk[openai]
+mcp>=1.9
+fastapi
+uvicorn[standard]
