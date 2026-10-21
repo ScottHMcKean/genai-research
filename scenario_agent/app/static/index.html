@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Scenario Assistant</title>
+<style>
+  :root{--bg:#f6f7f9;--panel:#fff;--ink:#1b3037;--muted:#618793;--accent:#ff3620;--teal:#1b5161;--line:#e6e9ec;}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);height:100vh;display:flex;flex-direction:column}
+  header{padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header b{font-size:16px} header .sub{color:var(--muted);font-size:13px}
+  nav{display:flex;gap:4px;margin-top:10px}
+  nav button{background:transparent;color:var(--muted);border:0;border-bottom:2px solid transparent;padding:6px 12px;font:inherit;font-weight:600;cursor:pointer;border-radius:0}
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  main{flex:1;overflow-y:auto}
+  .tab{display:none;max-width:900px;width:100%;margin:0 auto;padding:20px}
+  .tab.active{display:block}
+  /* chat */
+  #chat{padding-bottom:4px}
+  .msg{margin:14px 0;display:flex;gap:10px}
+  .msg .who{width:30px;height:30px;border-radius:50%;flex:0 0 30px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff}
+  .user .who{background:var(--teal)} .bot .who{background:var(--accent)}
+  .bubble{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;max-width:100%;overflow-x:auto}
+  .user .bubble{background:#eef4f6}
+  .bubble h1,.bubble h2,.bubble h3{font-size:15px;margin:.5em 0 .2em}
+  .bubble ul{margin:.3em 0;padding-left:1.2em}
+  .bubble code{background:#f1f1f1;padding:1px 4px;border-radius:4px;font-size:13px}
+  .steps{margin:2px 0 6px}
+  .step{border:1px solid var(--line);border-left:3px solid var(--teal);background:#fbfcfd;border-radius:8px;margin:6px 0;font-size:13px}
+  .step summary{cursor:pointer;padding:7px 12px;color:var(--teal);font-weight:600;list-style:none;display:flex;align-items:center;gap:8px}
+  .step summary::-webkit-details-marker{display:none}
+  .step .body{padding:0 12px 10px 12px;color:var(--muted);white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--teal);border-radius:50%;animation:s .7s linear infinite;display:inline-block}
+  @keyframes s{to{transform:rotate(360deg)}}
+  footer{border-top:1px solid var(--line);background:var(--panel);padding:12px}
+  .row{max-width:900px;margin:0 auto;display:flex;gap:8px}
+  textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;height:44px;max-height:140px}
+  button.primary{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:0 18px;font-weight:600;cursor:pointer}
+  button.primary:disabled{opacity:.5;cursor:default}
+  .hint{max-width:900px;margin:6px auto 0;color:var(--muted);font-size:12px}
+  /* shared panels */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 14px}
+  .card h3{margin:0 0 8px;font-size:14px;color:var(--teal)}
+  table.kv{width:100%;border-collapse:collapse;font-size:13px}
+  table.kv td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.kv td.k{color:var(--muted);width:200px;white-space:nowrap}
+  code.mono,pre.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  pre.mono{background:#fbfcfd;border:1px solid var(--line);border-radius:8px;padding:10px;overflow-x:auto;white-space:pre-wrap;margin:6px 0 0}
+  a{color:var(--accent)}
+  .tool{border:1px solid var(--line);border-radius:10px;margin:0 0 12px;background:var(--panel)}
+  .tool .hd{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .tool .nm{font-weight:700} .tool .srv{font-size:11px;color:#fff;background:var(--teal);border-radius:20px;padding:2px 8px}
+  .tool .desc{color:var(--muted);font-size:12.5px;padding:0 14px 8px}
+  .tool .run{padding:0 14px 12px;display:flex;gap:8px;align-items:flex-start}
+  .tool .run input{flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  button.sm{background:var(--teal);color:#fff;border:0;border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer}
+  .muted{color:var(--muted)}
+  .err{color:#98102a}
+</style>
+</head>
+<body>
+  <header>
+    <b>Scenario Assistant</b> <span class="sub">· custom agent · governed UC tools + RAG via managed MCP · served in-process on Databricks Apps</span>
+    <nav>
+      <button data-tab="chat" class="active">Chat</button>
+      <button data-tab="config">Configuration</button>
+      <button data-tab="tools">Tools (MCP)</button>
+      <button data-tab="traces">Traces</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- CHAT -->
+    <section id="tab-chat" class="tab active" style="display:flex;flex-direction:column;padding:0">
+      <div id="chat" class="tab" style="display:block;flex:1;max-width:900px;margin:0 auto;width:100%;padding:20px"></div>
+    </section>
+
+    <!-- CONFIG -->
+    <section id="tab-config" class="tab">
+      <div class="card"><h3>Agent configuration</h3><div id="cfg">Loading…</div></div>
+      <p class="muted">These values come straight from <code class="mono">config.py</code> — the single source of truth the agent and notebooks share.</p>
+    </section>
+
+    <!-- TOOLS -->
+    <section id="tab-tools" class="tab">
+      <p class="muted">The agent's tools are UC objects exposed through <b>managed MCP servers</b>. Call any one directly below — a <b>bare MCP call</b> returning the raw governed tool output the LLM would receive.</p>
+      <div id="tools">Loading…</div>
+    </section>
+
+    <!-- TRACES -->
+    <section id="tab-traces" class="tab">
+      <div class="card"><h3>MLflow experiment</h3><div id="exp">Loading…</div></div>
+      <div class="card"><h3>Recent traces</h3><div id="traces">Loading…</div></div>
+    </section>
+  </main>
+
+  <footer id="chat-footer">
+    <div class="row">
+      <textarea id="q" placeholder="Ask about simulation runs… e.g. For run_0001, how does output respond under demand_up?"></textarea>
+      <button id="send" class="primary">Send</button>
+    </div>
+    <div class="hint">The assistant calls governed tools (read_runs, read_sim, discover_models) and searches methodology docs, showing each step.</div>
+  </footer>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function md(s){s=esc(s);
+  s=s.replace(/^### (.*)$/gm,'<h3>$1</h3>').replace(/^## (.*)$/gm,'<h2>$1</h2>').replace(/^# (.*)$/gm,'<h2>$1</h2>');
+  s=s.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  s=s.replace(/^\s*[-•]\s+(.*)$/gm,'<li>$1</li>').replace(/(<li>[\s\S]*?<\/li>)/g,'<ul>$1</ul>');
+  return s.replace(/\n{2,}/g,'<br><br>').replace(/\n/g,'<br>');}
+function prettyJSON(s){try{return JSON.stringify(JSON.parse(s),null,2);}catch(e){return s;}}
+
+// ---- tabs ----
+const loaded={};
+$$('nav button').forEach(b=>b.onclick=()=>{
+  $$('nav button').forEach(x=>x.classList.toggle('active',x===b));
+  const t=b.dataset.tab;
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  $('#tab-'+t).classList.add('active');
+  $('#chat-footer').style.display = t==='chat' ? 'block':'none';
+  if(t==='config'&&!loaded.config) loadConfig();
+  if(t==='tools'&&!loaded.tools) loadTools();
+  if(t==='traces') loadTraces();   // always refresh
+});
+
+// ---- config ----
+async function loadConfig(){
+  loaded.config=true;
+  const c=await (await fetch('/api/config')).json();
+  const rows=[
+    ['Catalog',c.catalog],['Schema',c.schema],
+    ['Chat model',c.chat_model],['Embedding model',c.embed_model],
+    ['Vector Search endpoint',c.vector_search_endpoint],['Vector Search index',c.vector_search_index],
+    ['UC function tools',(c.uc_function_tools||[]).join('<br>')],
+    ['MCP servers',(c.mcp_servers||[]).map(esc).join('<br>')],
+    ['Workspace',c.workspace_host],
+    ['MLflow experiment', c.mlflow_experiment?`<a href="${c.mlflow_experiment}" target="_blank">open in MLflow ↗</a>`:'(default)'],
+  ];
+  $('#cfg').innerHTML='<table class="kv">'+rows.map(([k,v])=>`<tr><td class="k">${k}</td><td><code class="mono">${v}</code></td></tr>`).join('')+'</table>';
+}
+
+// ---- tools (bare MCP) ----
+async function loadTools(){
+  loaded.tools=true;
+  const d=await (await fetch('/api/tools')).json();
+  const parts=[];
+  for(const srv of d.servers){
+    if(srv.error){ parts.push(`<div class="card err">${esc(srv.server)} MCP: ${esc(srv.error)}</div>`); continue; }
+    for(const t of srv.tools){
+      const ex=exampleArgs(t.name);
+      parts.push(`<div class="tool">
+        <div class="hd"><span class="nm">${esc(t.name)}</span><span class="srv">${esc(srv.server)}</span></div>
+        <div class="desc">${esc(t.description)}</div>
+        <div class="run">
+          <input id="args-${esc(t.name)}" value='${esc(ex)}'/>
+          <button class="sm" onclick="callTool('${esc(t.name)}')">Call</button>
+        </div>
+        <pre class="mono" id="out-${esc(t.name)}" style="display:none;margin:0 14px 12px"></pre>
+      </div>`);
+    }
+  }
+  $('#tools').innerHTML=parts.join('')||'<p class="muted">No tools returned.</p>';
+}
+function exampleArgs(name){
+  if(name.endsWith('read_runs')) return '{}';
+  if(name.endsWith('read_sim')) return '{"run_ids":["run_0001"]}';
+  if(name.endsWith('discover_models')) return '{}';
+  return '{"query":"what is a step?"}';   // vector-search tool
+}
+async function callTool(name){
+  const out=$('#out-'+name); out.style.display='block'; out.textContent='calling…';
+  let args={}; try{args=JSON.parse($('#args-'+name).value||'{}');}catch(e){out.textContent='Invalid JSON args';return;}
+  try{
+    const r=await (await fetch('/api/tool_call',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,args})})).json();
+    out.textContent = r.raw ? prettyJSON(r.raw) : (r.error||JSON.stringify(r,null,2));
+  }catch(e){ out.textContent='Request failed: '+e.message; }
+}
+
+// ---- traces ----
+async function loadTraces(){
+  const d=await (await fetch('/api/traces')).json();
+  $('#exp').innerHTML = d.experiment_url
+    ? `<a href="${d.experiment_url}" target="_blank">Open the agent experiment in MLflow ↗</a><div class="muted" style="margin-top:4px">Autolog records one trace per turn (LLM + tool spans), tagged with the end user.</div>`
+    : `<span class="muted">${esc(d.note||'No experiment bound.')}</span>`;
+  if(d.error){ $('#traces').innerHTML=`<span class="err">${esc(d.error)}</span>`; return; }
+  const ts=d.traces||[];
+  if(!ts.length){ $('#traces').innerHTML='<span class="muted">No traces yet — ask something in the Chat tab, then refresh.</span>'; return; }
+  $('#traces').innerHTML='<table class="kv"><tr><td class="k">time</td><td class="k">status</td><td class="k">ms</td><td class="k">trace</td></tr>'+
+    ts.map(t=>{const when=t.timestamp_ms?new Date(Number(t.timestamp_ms)).toLocaleString():'';
+      return `<tr><td>${esc(when)}</td><td>${esc(t.status)}</td><td>${t.execution_ms??''}</td>
+      <td><a href="${t.url}" target="_blank"><code class="mono">${esc((t.trace_id||'').slice(0,16))}…</code></a></td></tr>`;}).join('')+'</table>';
+}
+
+// ---- chat ----
+const history=[];
+const SID=(crypto.randomUUID&&crypto.randomUUID())||String(Date.now());
+const chat=$('#chat'), q=$('#q'), send=$('#send');
+function addMsg(who){
+  const w=document.createElement('div');w.className='msg '+(who==='user'?'user':'bot');
+  w.innerHTML=`<div class="who">${who==='user'?'You':'AI'}</div><div class="bubble"></div>`;
+  chat.appendChild(w);chat.scrollTop=chat.scrollHeight;return w.querySelector('.bubble');
+}
+function scroll(){const m=$('#tab-chat');m.scrollTop=m.scrollHeight;}
+async function ask(){
+  const text=q.value.trim(); if(!text) return;
+  q.value=''; send.disabled=true;
+  addMsg('user').textContent=text; history.push({role:'user',content:text});
+  const bubble=addMsg('bot');
+  const steps=document.createElement('div'); steps.className='steps'; bubble.appendChild(steps);
+  const answer=document.createElement('div'); bubble.appendChild(answer);
+  const stepByCall={}; let answered=false;
+  try{
+    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({input:history, session_id:SID})});
+    const reader=res.body.getReader(), dec=new TextDecoder(); let buf='';
+    while(true){
+      const {value,done}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true}); const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const p of parts){
+        const line=p.replace(/^data: /,'').trim(); if(!line||line==='[DONE]') continue;
+        let ev; try{ev=JSON.parse(line);}catch(e){continue;}
+        if(ev.type==='function_call'){
+          let args=ev.arguments; try{args=JSON.stringify(JSON.parse(ev.arguments));}catch(e){}
+          const dd=document.createElement('details'); dd.className='step'; dd.open=true;
+          dd.innerHTML=`<summary><span class="spin"></span> Calling <b>${esc(ev.name)}</b></summary><div class="body">${esc(args)}</div>`;
+          dd.dataset.name=ev.name||'tool';
+          steps.appendChild(dd); stepByCall[ev.call_id]=dd; scroll();
+        }else if(ev.type==='function_call_output'){
+          const dd=stepByCall[ev.call_id];
+          if(dd){ dd.querySelector('summary').innerHTML=`✓ ${esc(dd.dataset.name||'tool')} result`;
+                 dd.querySelector('.body').textContent=prettyJSON(ev.output||'').slice(0,1500); dd.open=false; }
+        }else if(ev.type==='message'){
+          const c=ev.content; const t=Array.isArray(c)?(c[0]&&c[0].text||''):c;
+          answer.innerHTML=md(t); answered=true; history.push({role:'assistant',content:t});
+        }else if(ev.type==='error'){ answer.innerHTML=`<span class="err">Error: ${esc(ev.message)}</span>`; }
+        scroll();
+      }
+    }
+    if(!answered) answer.innerHTML='<span class="err">No answer returned.</span>';
+  }catch(e){ answer.innerHTML=`<span class="err">Request failed: ${esc(e.message)}</span>`; }
+  send.disabled=false; q.focus();
+}
+send.onclick=ask;
+q.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask();}});
+</script>
+</body>
+</html>
