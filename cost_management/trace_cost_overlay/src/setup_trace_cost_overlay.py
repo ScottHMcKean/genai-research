@@ -80,14 +80,14 @@ spark.sql(f"""
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {OUT} COMMENT 'Interim read-only corrected-trace-cost overlay. Safe to drop.'")
 spark.sql(f"""
   CREATE TABLE IF NOT EXISTS {OUT}.trace_cost_rate_contract (
-    model_pattern STRING, region STRING, discount_factor DOUBLE,
+    model_pattern STRING, discount_factor DOUBLE,
     valid_from DATE, valid_to DATE, priority INT, notes STRING
-  ) COMMENT 'Negotiated discount off list for Databricks-hosted models. 1.0 = list. External already bills actual USD.'
+  ) COMMENT 'Negotiated discount off list for Databricks-hosted models. 1.0 = list. External already bills actual USD. list_prices already gives the region-correct price, so no region column here.'
 """)
 spark.sql(f"""
   INSERT OVERWRITE {OUT}.trace_cost_rate_contract VALUES
-  ('%', '', 1.0, DATE'2026-01-01', NULL, 100,
-   'Default: list price (region-correct via list_prices). Add a customer row, e.g. (''claude%'',''northeurope'',0.88,...,10) for 12% off.')
+  ('%', 1.0, DATE'2026-01-01', NULL, 100,
+   'Default: list price (region-correct via list_prices). Add a customer row, e.g. (''claude%'',0.88,...,10) for 12% off.')
 """)
 
 # COMMAND ----------
@@ -153,7 +153,9 @@ spark.sql(f"""
 CREATE OR REPLACE VIEW {OUT}.v_model_rate_daily AS
 SELECT c.usage_date, c.model_key, c.cost_source, c.usd, c.usd_list, c.discount_factor,
   t.tokens, c.usd / nullif(t.tokens, 0) AS usd_per_token,
-  CASE WHEN c.usd / nullif(t.tokens, 0) * 1e6 < 200 THEN 'pay_per_token' ELSE 'provisioned_or_sparse' END AS billing_basis
+  CASE WHEN c.usd / nullif(t.tokens, 0) IS NULL THEN 'unknown'
+       WHEN c.usd / nullif(t.tokens, 0) * 1e6 < 200 THEN 'pay_per_token'
+       ELSE 'provisioned_or_sparse' END AS billing_basis
 FROM {OUT}.v_model_cost_daily c
 JOIN {OUT}.v_model_tokens_daily t USING (usage_date, model_key, cost_source)
 """)
@@ -189,17 +191,17 @@ WITH u AS (
     coalesce(input_tokens,0) AS input_tokens, coalesce(output_tokens,0) AS output_tokens,
     coalesce(token_details.cache_read_input_tokens,0) AS cache_read_tokens,
     coalesce(token_details.cache_creation_input_tokens,0) AS cache_creation_tokens,
+    -- billable tokens, computed once: databricks ex cache-read; external raw input+output
+    CASE WHEN destination_type = 'EXTERNAL_FOUNDATION_MODEL'
+         THEN coalesce(input_tokens,0) + coalesce(output_tokens,0)
+         ELSE greatest(coalesce(input_tokens,0) - coalesce(token_details.cache_read_input_tokens,0), 0) + coalesce(output_tokens,0)
+    END AS priced_tokens,
     request_tags, status_code
   FROM system.ai_gateway.usage WHERE destination_type <> ''
 )
 SELECT u.*,
-  CASE WHEN u.cost_source = 'databricks'
-       THEN greatest(u.input_tokens - u.cache_read_tokens, 0) + u.output_tokens
-       ELSE u.input_tokens + u.output_tokens END AS priced_tokens,
   r.usd_per_token, r.billing_basis,
-  (CASE WHEN u.cost_source = 'databricks'
-        THEN greatest(u.input_tokens - u.cache_read_tokens, 0) + u.output_tokens
-        ELSE u.input_tokens + u.output_tokens END) * r.usd_per_token AS request_cost,
+  u.priced_tokens * r.usd_per_token AS request_cost,
   (r.usd_per_token IS NOT NULL) AS rate_matched
 FROM u
 LEFT JOIN {OUT}.v_model_rate_daily r
@@ -217,7 +219,7 @@ if TRACE_MODE == "gateway":
       FROM {SPANS} WHERE attributes:['databricks.request_id'] IS NOT NULL
     )
     SELECT sr.trace_id, min(rc.usage_date) AS trace_date, min(rc.event_time) AS trace_start_time,
-      count(*) AS request_count,
+      count(*) AS llm_call_count,  -- gateway invocations (one request_id can span several)
       sum(rc.input_tokens) AS input_tokens, sum(rc.output_tokens) AS output_tokens,
       sum(rc.cache_read_tokens) AS cache_read_tokens,
       sum(rc.request_cost) AS corrected_cost,
@@ -256,6 +258,27 @@ else:
       ON s.span_date = r.usage_date AND s.model_key = r.model_key AND r.cost_source = 'databricks'
     GROUP BY s.trace_id
     """)
+    # Per-span corrected cost, for the optional in-place backfill (see README).
+    spark.sql(f"""
+    CREATE OR REPLACE VIEW {OUT}.v_span_cost_correction AS
+    WITH s AS (
+      SELECT trace_id, span_id, date AS span_date,
+        regexp_replace(coalesce(nullif(attributes:['gen_ai.request.model']::string,''),
+                                nullif(attributes:['mlflow.llm.model']::string,'')),
+                       '^(system\\\\.ai\\\\.)?(databricks-)?', '') AS model_key,
+        attributes:['mlflow.llm.cost']['total_cost']::double AS orig_total_cost,
+        coalesce(attributes:['mlflow.chat.tokenUsage']['input_tokens']::bigint,0)  AS input_tokens,
+        coalesce(attributes:['mlflow.chat.tokenUsage']['output_tokens']::bigint,0) AS output_tokens,
+        coalesce(attributes:['mlflow.chat.tokenUsage']['cache_read_input_tokens']::bigint,0) AS cache_read_tokens
+      FROM {SPANS} WHERE attributes:['mlflow.llm.cost'] IS NOT NULL
+    )
+    SELECT s.trace_id, s.span_id, s.model_key, s.orig_total_cost, r.billing_basis,
+      round(greatest(s.input_tokens - s.cache_read_tokens,0) * r.usd_per_token, 10) AS new_input_cost,
+      round(s.output_tokens * r.usd_per_token, 10) AS new_output_cost,
+      round((greatest(s.input_tokens - s.cache_read_tokens,0) + s.output_tokens) * r.usd_per_token, 10) AS new_total_cost
+    FROM s LEFT JOIN {OUT}.v_model_rate_daily r
+      ON s.span_date = r.usage_date AND s.model_key = r.model_key AND r.cost_source = 'databricks'
+    """)
 print(f"Created v_trace_cost_corrected ({TRACE_MODE} mode)")
 
 # COMMAND ----------
@@ -278,8 +301,8 @@ SELECT coalesce(b.usage_date, a.usage_date) AS usage_date,
   coalesce(b.cost_source, a.cost_source) AS cost_source,
   round(b.authoritative_usd, 2) AS authoritative_usd,
   round(a.attributed_usd, 2) AS attributed_usd,
-  round(b.authoritative_usd - a.attributed_usd, 2) AS unattributed_usd,
-  round(100 * a.attributed_usd / nullif(b.authoritative_usd, 0), 1) AS attributed_pct
+  round(coalesce(b.authoritative_usd,0) - coalesce(a.attributed_usd,0), 2) AS unattributed_usd,
+  round(100 * coalesce(a.attributed_usd,0) / nullif(b.authoritative_usd, 0), 1) AS attributed_pct
 FROM authoritative b FULL OUTER JOIN attributed a USING (usage_date, cost_source)
 """)
 
@@ -289,13 +312,14 @@ FROM authoritative b FULL OUTER JOIN attributed a USING (usage_date, cost_source
 
 # COMMAND ----------
 
+# Reconciliation: how much authoritative billing USD the gateway requests account for.
+# (rate x tokens == billing is tautological by construction, so it is NOT a check.)
 spark.sql(f"""
-  SELECT round(sum(usd_per_token * tokens), 2) AS rate_times_tokens,
-         round(sum(usd), 2) AS authoritative_usd
-  FROM {OUT}.v_model_rate_daily WHERE usage_date >= current_date()-INTERVAL 7 DAYS AND cost_source='databricks'
-""").show(truncate=False)
-spark.sql(f"""
-  SELECT cost_source, round(avg(attributed_pct),1) AS avg_attributed_pct
+  SELECT cost_source,
+         round(sum(authoritative_usd),2) AS authoritative_usd,
+         round(sum(attributed_usd),2)    AS attributed_usd,
+         round(sum(unattributed_usd),2)  AS unattributed_usd,
+         round(100*sum(attributed_usd)/nullif(sum(authoritative_usd),0),1) AS attributed_pct
   FROM {OUT}.v_trace_cost_reconciliation WHERE usage_date >= current_date()-INTERVAL 7 DAYS GROUP BY 1
 """).show(truncate=False)
 spark.sql(f"SELECT count(*) traces, round(sum(corrected_cost),2) usd FROM {OUT}.v_trace_cost_corrected").show(truncate=False)
