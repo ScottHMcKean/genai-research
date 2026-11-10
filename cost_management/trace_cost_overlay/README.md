@@ -1,138 +1,115 @@
-# Interim corrected-trace-cost overlay
+# Corrected trace cost overlay
 
-A **read-only** overlay that recomputes LLM cost from MLflow/OTel traces stored in
-Unity Catalog, correcting for a pricing mismatch in the current product. Delete it
-when the product fix lands.
+A **read-only** overlay that recomputes LLM trace cost from the **authoritative
+Databricks cost tables** instead of MLflow's LiteLLM list estimate. Delete it when
+the product fix lands.
 
 ## The problem
 
-MLflow trace cost is estimated at an AWS/GCP list rate (~**$0.07/DBU**) instead of
-the customer's Azure North Europe rate (**$0.105/DBU** list, ~**$0.092/DBU**
-effective). This overlay reads the trace spans and writes corrected cost into its
-own objects. It never modifies the MLflow-managed trace tables.
+MLflow trace cost (`mlflow.llm.cost`) is a per-token estimate from the LiteLLM list
+table. It can use the wrong region/contract rate (the original "$0.07 vs $0.105"
+mismatch) and it ignores provisioned-throughput economics. An earlier version of
+this overlay scaled that estimate by a $/DBU ratio — that mixed a per-token base
+with a per-DBU base and was wrong. This version prices from source.
 
-## Hard rules honoured
+## Authoritative sources
 
-- No writes to `<prefix>_otel_spans | _otel_logs | _otel_metrics | _otel_annotations`
-  or `<prefix>_trace_metadata | _trace_unified`. The overlay only reads them.
-- Rates live in `trace_cost_rate_config`, never in code.
-- All objects live in `output_catalog.output_schema` and are safe to drop.
+| Table | Role |
+| --- | --- |
+| `system.ai_gateway.external_model_spend` | external-model cost, already in USD, per model/endpoint/hour |
+| `system.ai_gateway.usage` | per-request tokens + `request_id` + full cache detail |
+| `system.billing.usage` x `system.billing.list_prices` | Databricks-hosted DBU -> USD; **region-correct**; `list_prices` is **SCD2** on the price time window |
+| `system.serving.endpoint_usage` / `served_entities` | serving token and entity detail |
 
-## What the discovery found (uaigw test bed)
+Because `list_prices` already carries the region-specific SKU price and is SCD2, the
+region mismatch disappears with **no rate config**, and price changes over time are
+handled by the usage-time join.
 
-The test workspace uses **AI Gateway unified tracing**, which differs from the
-customer's shape in one decisive way:
+## Method
 
-| Aspect | Customer (expected) | uaigw test bed (actual) |
-| --- | --- | --- |
-| Per-span cost | `mlflow.llm.cost` present | **absent** — no cost anywhere |
-| Token usage | `mlflow.chat.tokenUsage` | present, plus `gen_ai.usage.*` |
-| `tokenUsage` encoding | nested object | **JSON string** (needs `parse_json(...::string)`) |
-| Model on the kept span | on the LLM span | blank; recovered from child span / endpoint |
-| Spans per call | — | **two** (parent `LLM` + child `chat`), identical tokens |
-| Cache read tokens | counted in cost | `cache_read_input_tokens` inside `tokenUsage`, can be ~all input |
-| Trace-level cost | `mlflow.trace.cost` | none (no `_trace_metadata` table) |
+1. `v_model_cost_daily` — authoritative daily USD per model (billing x list_prices
+   for Databricks-hosted, `external_model_spend` for external). Contract discount
+   applied here.
+2. `v_model_tokens_daily` — gateway billable tokens per model/day (Databricks: ex
+   cache-read; external: input+output).
+3. `v_model_rate_daily` — effective `usd_per_token = usd / tokens`, with a
+   `billing_basis` flag. `v_model_rate_scd2` collapses it into rate periods;
+   `v_list_price_history` shows the list-price SCD2 history.
+4. `v_request_cost` — each gateway request priced by its tokens x the model rate.
+5. `v_trace_cost_corrected` — cost per trace. Two modes (see below).
+6. `v_trace_cost_reconciliation` — attributed vs authoritative USD per day.
 
-Because there is no `mlflow.llm.cost` to multiply, the overlay prices from tokens on
-this workspace — which is exactly the fallback the spec calls for when the MLflow
-cost does not imply a flat $/DBU.
+Allocation by token share makes the total **reconcile to billing by construction**.
+A model/day with billing but no gateway traffic appears as an unattributed gap (=
+non-gateway usage).
 
-## Two pricing engines (chosen per span)
+### Trace link modes (`trace_mode` widget)
 
-1. **`dbu_multiplier`** — span has `mlflow.llm.cost`.
-   `corrected = mlflow_total_cost × (target_rate / mlflow_assumed_rate)`,
-   where `target_rate` is `azure_list_rate` or `effective_rate` per `pricing_mode`.
-   With the seeded rates this is **1.5×** (list) or **~1.3143×** (effective).
-   This is the customer's path.
-2. **`token`** — span has only token usage.
-   `corrected = billable_input/1e6 × input_rate + cache_read/1e6 × cache_rate +
-   output/1e6 × output_rate`, with `billable_input = input_tokens − cache_read`.
-   This is the uaigw path.
+- **`gateway`** (AI Gateway unified tracing, e.g. uaigw): link spans to requests by
+  `databricks.request_id`, then sum `v_request_cost` per trace.
+- **`mlflow_span`** (MLflow app tracing, e.g. skunkworks `forecast_demo`): reprice
+  each LLM span's own tokens (`mlflow.chat.tokenUsage`) by the model rate. Keeps the
+  original `mlflow.llm.cost` for comparison.
 
-Unmatched models are **passed through, never dropped**, and flagged
-`rate_matched = false` (they fall to the `%` default rate row).
+## `billing_basis`: pay-per-token vs provisioned
 
-## Dedup
+For pay-per-token models the effective rate is a true token price and is stable. For
+**provisioned-throughput** endpoints you pay for reserved capacity, so `usd/token` is
+high and varies with utilisation — it is **not** a token list price. The rate layer
+flags each model/day as `pay_per_token` or `provisioned_or_sparse`. Note MLflow's
+`mlflow.llm.cost` **understates** provisioned cost because it prices per token only.
 
-Each gateway call emits a parent `LLM` span and a child `chat` span carrying the
-**same** token usage. Summing every span double-counts. Reproducing MLflow's rule
-(skip a span if an ancestor carries the same attribute), the trace view keeps only
-the **top-most** cost-bearing span per branch (`is_topmost_cost_span`). Verified:
-75,247 token spans → 37,624 top-most (exactly half); trace-view total equals the
-top-most span total and is half the naive sum.
+## Objects (all in `output_catalog.output_schema`)
 
-## Objects created (all in `output_catalog.output_schema`)
-
-| Object | Kind | Purpose |
-| --- | --- | --- |
-| `trace_cost_settings` | table | runtime `pricing_mode` read by the views |
-| `trace_cost_rate_config` | table | rates (seeded) |
-| `v_trace_span_cost_corrected` | view | one row per cost-bearing span |
-| `v_trace_cost_corrected` | view | one row per trace (deduped) |
-| `v_trace_cost_reconciliation` | view | corrected vs `system.billing.usage` |
-| `trace_cost_corrected` | table | optional materialization (job target) |
+Tables: `trace_cost_rate_contract` (config), `trace_cost_corrected` (materialized).
+Views: `v_model_cost_daily`, `v_model_tokens_daily`, `v_model_rate_daily`,
+`v_model_rate_scd2`, `v_list_price_history`, `v_request_cost`,
+`v_trace_cost_corrected`, `v_trace_cost_reconciliation`.
 
 ## Run it
 
-Parameters (notebook widgets / bundle variables): `trace_catalog`, `trace_schema`,
-`table_prefix`, `output_catalog`, `output_schema`, `pricing_mode`
-(`effective` | `azure_list`).
+Widgets: `trace_catalog`, `trace_schema`, `table_prefix`, `output_catalog`,
+`output_schema`, `trace_mode` (`gateway` | `mlflow_span`).
 
-1. **Setup + views + validation + reconciliation** — run
-   `src/setup_trace_cost_overlay.py` with the widgets set.
-2. **Materialize (optional, daily)** — deploy the bundle and run the job:
+1. Run `src/setup_trace_cost_overlay.py` with the widgets set. It creates the config,
+   the views, and prints the validation (rate x tokens == billing; reconciliation
+   percentage).
+2. Materialize (optional, daily) via the bundle:
    ```bash
    databricks bundle deploy -t dev --profile <PROFILE>
    databricks bundle run materialize_trace_cost -t dev --profile <PROFILE>
    ```
    The job MERGEs `v_trace_cost_corrected` into `trace_cost_corrected` on
-   `trace_id`, incrementally, with a 48h watermark lookback on `trace_start_time`.
-   It runs on serverless; in `dev` mode the schedule is paused.
-3. **Dashboard** — deployed by the bundle
-   (`dashboards/trace_cost_overlay.lvdash.json`).
+   `trace_id`, incrementally, with a watermark on `trace_date`. Serverless; the
+   schedule is paused in `dev`.
+3. The AI/BI dashboard ships in the bundle.
 
 ## How to change rates
 
-Edit `trace_cost_rate_config` — no code change:
+- **Region/list price**: nothing to do — `list_prices` is authoritative and SCD2.
+- **Negotiated discount**: add a row to `trace_cost_rate_contract`, e.g.
+  `('claude%','northeurope',0.88, DATE'2026-01-01', NULL, 10, '12% off list')`.
+  `discount_factor = 1.0` is list. External models already bill actual USD.
 
-- **Token rates**: update `input_rate_per_mtok`, `output_rate_per_mtok`,
-  `cache_read_rate_per_mtok` (USD per 1M tokens) for the model pattern.
-- **DBU multiplier**: update `azure_list_rate` / `effective_rate` /
-  `mlflow_assumed_rate`.
-- **Precedence**: lower `priority` wins; the `%` row at priority 100 is the default
-  and marks spans `rate_matched = false`.
-- **Switch mode**: `INSERT OVERWRITE trace_cost_settings VALUES ('pricing_mode','azure_list')`.
+## Tested
 
-> The seeded `token` rates are **PLACEHOLDERS** (fictional test-bed models). Replace
-> them with real per-token rates before trusting dollar figures.
+- **uaigw** (`gateway` mode): 2.09M-span gateway table. Daily reconciliation 98-100%
+  on most days; rate x tokens == billing within rounding. External Azure/OpenAI/etc.
+  priced directly from `external_model_spend`.
+- **skunkworks** (`mlflow_span` mode): `forecast_demo` traces repriced from billing;
+  surfaced that the endpoint is provisioned (high `usd/token`), which MLflow's
+  per-token estimate missed.
 
 ## Caveats
 
-- MLflow prices from LiteLLM per-token list prices, not per-DBU. On the skunkworks
-  check, `databricks-claude-sonnet-4-5` implied **$3 / M input, $15 / M output** —
-  no DBU in the math. Confirm the implied $/DBU before relying on a flat multiplier;
-  the setup notebook prints the implied per-token price for `mlflow.llm.cost` spans.
-- Cache read tokens are inside `input_tokens` but priced separately. On uaigw,
-  `claude-opus-5` was ~92% cache reads; pricing them at full input rate nearly
-  doubles the estimate.
-- Some spans have tokens but no resolvable model → default rate, `rate_matched=false`.
-  On uaigw this was 0 (model always recovered from child or endpoint).
-- `mlflow.trace.cost` validation runs only when a `<prefix>_trace_metadata` table
-  exists; it is N/A on token-only workspaces.
-- Reconciliation on a shared workspace compares against *all* model-serving usage,
-  not just traced calls, so the gap is large on a test bed.
+- Requests whose model has no billing attribution that day are flagged
+  `rate_matched = false` (not dropped).
+- `provisioned_or_sparse` per-token rates reflect capacity, not list price.
+- Reconciliation gap = billing with no gateway traffic (non-gateway callers).
+- `request_id` is present on ~93% of kept gateway spans; traces without it are not
+  linked in `gateway` mode.
 
 ## Teardown
 
-Run the teardown cell at the end of `src/setup_trace_cost_overlay.py`, or:
-
-```sql
-DROP VIEW  IF EXISTS <out>.v_trace_cost_reconciliation;
-DROP VIEW  IF EXISTS <out>.v_trace_cost_corrected;
-DROP VIEW  IF EXISTS <out>.v_trace_span_cost_corrected;
-DROP TABLE IF EXISTS <out>.trace_cost_corrected;
-DROP TABLE IF EXISTS <out>.trace_cost_rate_config;
-DROP TABLE IF EXISTS <out>.trace_cost_settings;
-DROP SCHEMA IF EXISTS <out>;
-```
-Then `databricks bundle destroy -t dev` to remove the job and dashboard.
+Uncomment the teardown cell in `src/setup_trace_cost_overlay.py`, then
+`databricks bundle destroy -t dev`.

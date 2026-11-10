@@ -47,7 +47,7 @@ resources:
             base_parameters:
               output_catalog: ${var.output_catalog}
               output_schema: ${var.output_schema}
-              lookback_hours: "48"
+              lookback_days: "3"
           # No job_clusters block => runs on serverless compute.
 
   dashboards:

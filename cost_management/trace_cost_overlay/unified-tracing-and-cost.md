@@ -21,28 +21,24 @@ record cost differently.
 | Token usage | `mlflow.chat.tokenUsage` | `mlflow.chat.tokenUsage` and `gen_ai.usage.*` |
 | Trace-level cost | `mlflow.trace.cost` in `_trace_metadata` | none (no `_trace_metadata` table) |
 
-The customer workspace is the left column. Cost is present, but the rate is wrong.
-The `uaigw_fe` test bed is the right column. Cost is absent, and only tokens exist.
+Neither kind gives a cost that matches the customer rate. The MLflow cost uses a
+list rate that can be wrong. The gateway trace has no cost at all. The correction
+prices from the Databricks cost tables, not from the span.
 
 ## 2. How cost reaches a span (MLflow application tracing)
 
 MLflow records token usage and an estimated USD cost on each LLM-call span. MLflow
 then aggregates both to the trace.
 
-- Token usage is the span attribute `mlflow.chat.tokenUsage`. It holds
-  `input_tokens`, `output_tokens`, and `total_tokens`.
-- Cost is the span attribute `mlflow.llm.cost`. It holds `input_cost`,
-  `output_cost`, and `total_cost` in USD.
+- Token usage is the span attribute `mlflow.chat.tokenUsage`.
+- Cost is the span attribute `mlflow.llm.cost` (`input_cost`, `output_cost`,
+  `total_cost`).
 - Model and provider identity are `mlflow.llm.model` and `mlflow.llm.provider`.
-- Trace totals are `mlflow.trace.cost` and `mlflow.trace.tokenUsage`. They are in
-  the `<prefix>_trace_metadata` view.
 
 MLflow does not price per DBU. MLflow reads a per-token list price from the LiteLLM
-price table (`cost_per_token`, with a built-in fallback). MLflow keys the price on
-the model name and provider, then multiplies by the token counts. The skunkworks
-data confirms this. `databricks-claude-sonnet-4-5` gave $3 per 1M input tokens and
-$15 per 1M output tokens. This is a per-token list price. No DBU is in the
-calculation.
+price table and multiplies by the token counts. This has two problems. The list
+price can differ from the customer contract and region. The per-token model also
+ignores provisioned-throughput cost, which pays for reserved capacity, not tokens.
 
 ## 3. What to enable to get cost
 
@@ -51,17 +47,11 @@ For MLflow application tracing (to get `mlflow.llm.cost`):
 1. Use the correct MLflow version. Token tracking needs 3.2.0 or later. Cost
    tracking needs 3.10.0 or later. The Unity Catalog trace location needs 3.14.0 or
    later.
-2. Compute cost on the client. Databricks-managed MLflow does not compute cost on
-   the server. Install LiteLLM in the application, or set the `mlflow.llm.cost`
-   attribute on the span yourself.
-3. Make the model name on the span match the price table. A custom serving-endpoint
-   alias (for example `my-claude-endpoint`) does not identify a model. The cost is
-   then $0.00, even when tokens are present.
-4. Bind the experiment to a Unity Catalog trace location at creation time. Set
-   `MLFLOW_TRACING_SQL_WAREHOUSE_ID`. Set `trace_location=UnityCatalog(catalog,
-   schema, table_prefix)`. Create the schema first. Grant `USE CATALOG`,
-   `USE SCHEMA`, `SELECT`, and `MODIFY` on the trace tables. `ALL_PRIVILEGES` alone
-   is not enough. You cannot reassign the binding later.
+2. Compute cost on the client. Install LiteLLM in the application, or set the
+   `mlflow.llm.cost` attribute on the span yourself.
+3. Make the model name on the span match the price table. A custom endpoint alias
+   gives a $0.00 cost.
+4. Bind the experiment to a Unity Catalog trace location at creation time.
 
 For AI Gateway unified tracing:
 
@@ -69,67 +59,66 @@ For AI Gateway unified tracing:
 2. A metastore admin opens AI Gateway > Govern > Traces > Set up tracing.
 3. The admin selects a catalog and schema, then saves.
 
-This captures `gen_ai.*` and `databricks.*` attributes and token usage. It records
-no cost attribute. Delivery is best-effort, so keep audit logs as the system of
-record.
+This captures tokens but records no cost attribute.
 
-## 4. Why cost is wrong or absent. The two cases this overlay targets.
+## 4. The authoritative cost tables
 
-1. Wrong rate (the customer). Cost is present. The LiteLLM list price does not match
-   the customer Azure North Europe rate. MLflow estimates at an AWS/GCP list rate
-   (about $0.07 per DBU-equivalent) instead of Azure NE ($0.105 list, about $0.092
-   effective). The number is self-consistent, but the rate card is wrong.
-2. No cost (AI Gateway and uaigw). Gateway spans carry tokens but no
-   `mlflow.llm.cost`. Nothing exists to correct, so the overlay must derive cost
-   from tokens. MLflow shows the same $0.00 case when the model name is a custom
-   endpoint alias.
+Databricks already computes the real cost. The overlay reads these tables:
+
+| Table | Role |
+| --- | --- |
+| `system.ai_gateway.external_model_spend` | external-model cost, already in USD |
+| `system.ai_gateway.usage` | per-request tokens, `request_id`, cache detail |
+| `system.billing.usage` with `system.billing.list_prices` | Databricks-hosted DBUs priced to USD |
+| `system.serving.endpoint_usage` and `served_entities` | serving token and entity detail |
+
+Two properties make this the right source. `list_prices` holds the region-specific
+SKU price, so the cost is region-correct with no config. `list_prices` is also SCD2:
+each row has a `price_start_time` and `price_end_time`. The overlay joins on the
+usage time window, so each day uses the price that was in effect that day. Price
+changes over time need no extra work.
 
 ## 5. How this overlay helps
 
-The overlay is a read-only set of Unity Catalog views over the existing
-`_otel_spans` table. It never writes to the MLflow-managed trace tables. For each
-span, it detects the case and corrects the cost.
+The overlay is a read-only set of Unity Catalog views. It never writes to the
+MLflow trace tables. It prices in four steps:
 
-- Span has `mlflow.llm.cost` (the `dbu_multiplier` mode).
-  `corrected = mlflow_total_cost × (target_rate / mlflow_assumed_rate)`. The target
-  rate is the Azure list rate or the effective rate from the config table. The
-  seeded rates give 1.5× (list) or 1.3143× (effective). The skunkworks test confirms
-  this. The multiplier applies exactly. The sum of the original span cost equals
-  MLflow's own `mlflow.trace.cost` for 100% of traces. The correction uses a number
-  that reconciles to source.
-- Span has tokens only (the `token` mode).
-  `corrected = billable_input/1e6 × input_rate + cache_read/1e6 × cache_rate +
-  output/1e6 × output_rate`. This prices from tokens directly. MLflow recommends
-  this path when the model name does not resolve. It is the only path that works on
-  gateway traces. The uaigw test confirms it.
+1. Compute authoritative daily USD per model. Use `billing.usage` times
+   `list_prices` for Databricks-hosted models. Use `external_model_spend` for
+   external models.
+2. Compute gateway billable tokens per model per day.
+3. Divide USD by tokens to get an effective rate per model per day.
+4. Price each request or span by its tokens. Sum the result per trace.
 
-The overlay also handles the parts that make a naive query wrong:
+The overlay attributes cost by token share, so the total reconciles to billing. A
+model and day with billing but no gateway traffic shows as an unattributed gap. That
+gap is the non-gateway usage.
 
-- Model identity. It resolves the model from `gen_ai.request.model`,
-  `mlflow.llm.model`, the child span, or the endpoint name. It strips `system.ai.`
-  and `databricks-` prefixes so the name matches the rate table.
-- Double counting. A gateway call writes a parent `LLM` span and a child `chat`
-  span with identical tokens. The trace view keeps only the top-most cost-bearing
-  span in each branch (75,247 → 37,624 on uaigw). The MLflow application traces put
-  cost on leaf spans only, so the overlay drops none there.
-- Cache reads. `cache_read_input_tokens` is inside `input_tokens` and can be almost
-  all of it (about 92% for one uaigw model). The overlay prices cache reads on a
-  separate, lower rate.
-- Unmatched models. The overlay passes them through, never drops them, and flags
-  them `rate_matched = false`.
+The overlay links traces to cost in two modes:
 
-Rates live only in `trace_cost_rate_config`. No rate is in code. To change a rate,
-edit a row. To switch between list and effective, change the `pricing_mode`
-setting.
+- Gateway mode. Link each span to a gateway request by `databricks.request_id`. Sum
+  the request cost per trace.
+- MLflow-span mode. Reprice each LLM span's own tokens by the model rate. Keep the
+  original `mlflow.llm.cost` for comparison.
+
+The overlay handles the parts that make a naive query wrong:
+
+- Model identity. It resolves the model from the gateway, MLflow, or billing
+  attributes. It strips `system.ai.` and `databricks-` prefixes so the names match.
+- Cache reads. The gateway `input_tokens` include cache reads. Serving billing is on
+  billable tokens. The overlay prices Databricks-hosted requests on billable tokens
+  (`input - cache_read + output`), the same basis as the rate.
+- Billing basis. For a provisioned endpoint, the cost pays for reserved capacity.
+  The per-token rate is then high and is not a token list price. The overlay flags
+  each model and day as `pay_per_token` or `provisioned_or_sparse`.
 
 ## 6. The exit. When to delete this overlay.
 
 This overlay is interim. Delete it when MLflow trace cost prices from the platform
 instead of the LiteLLM list table. That is, delete it when Gateway/FMAPI pricing (or
 a `system`-table cost source) feeds the trace cost directly, so the recorded
-`mlflow.llm.cost` already reflects the customer rate. Until then, keep the seeded
-token rates current. Treat every corrected figure as an estimate. The teardown
-steps are in `README.md`.
+`mlflow.llm.cost` already reflects the customer rate. The teardown steps are in
+`README.md`.
 
 ## Sources
 
@@ -139,3 +128,5 @@ steps are in `README.md`.
   https://docs.databricks.com/aws/en/mlflow3/genai/tracing/trace-unity-catalog
 - Databricks — AI Gateway unified trace table (Beta):
   https://docs.databricks.com/aws/en/ai-gateway/unified-trace-table
+- Databricks — AI Gateway usage and external model spend system tables:
+  https://docs.databricks.com/aws/en/admin/system-tables/
