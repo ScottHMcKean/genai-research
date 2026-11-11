@@ -1,0 +1,178 @@
+{
+  "datasets": [
+    {
+      "name": "ds_totals",
+      "displayName": "Totals (30d)",
+      "queryLines": [
+        "SELECT round(sum(corrected_cost),2) AS total_corrected,\n",
+        "       round(sum(mlflow_total_cost),2) AS total_mlflow,\n",
+        "       sum(unmatched_span_count) AS unmatched_spans,\n",
+        "       count(*) AS traces\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_corrected\n",
+        "WHERE trace_date >= current_date() - INTERVAL 30 DAYS"
+      ]
+    },
+    {
+      "name": "ds_by_day",
+      "displayName": "By day (30d)",
+      "queryLines": [
+        "SELECT trace_date,\n",
+        "       round(sum(corrected_cost),2) AS corrected_cost,\n",
+        "       round(sum(mlflow_total_cost),2) AS mlflow_cost\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_corrected\n",
+        "WHERE trace_date >= current_date() - INTERVAL 30 DAYS\n",
+        "GROUP BY trace_date ORDER BY trace_date"
+      ]
+    },
+    {
+      "name": "ds_by_model",
+      "displayName": "By model (30d)",
+      "queryLines": [
+        "SELECT model_key,\n",
+        "       round(sum(corrected_cost),2) AS corrected_cost,\n",
+        "       sum(input_tokens) AS input_tokens,\n",
+        "       sum(output_tokens) AS output_tokens,\n",
+        "       max(rate_matched) AS rate_matched\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_span_cost_corrected\n",
+        "WHERE is_topmost_cost_span AND span_date >= current_date() - INTERVAL 30 DAYS\n",
+        "GROUP BY model_key ORDER BY corrected_cost DESC"
+      ]
+    },
+    {
+      "name": "ds_top_traces",
+      "displayName": "Top traces (30d)",
+      "queryLines": [
+        "SELECT trace_id, trace_date, models,\n",
+        "       round(corrected_cost,4) AS corrected_cost,\n",
+        "       input_tokens, output_tokens, cache_read_tokens, all_rates_matched\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_corrected\n",
+        "WHERE trace_date >= current_date() - INTERVAL 30 DAYS\n",
+        "ORDER BY corrected_cost DESC LIMIT 50"
+      ]
+    },
+    {
+      "name": "ds_unmatched",
+      "displayName": "Unmatched rate spans (30d)",
+      "queryLines": [
+        "SELECT count_if(NOT rate_matched) AS unmatched_spans\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_span_cost_corrected\n",
+        "WHERE is_topmost_cost_span AND span_date >= current_date() - INTERVAL 30 DAYS"
+      ]
+    },
+    {
+      "name": "ds_recon",
+      "displayName": "Reconciliation (14d)",
+      "queryLines": [
+        "SELECT usage_date, trace_corrected_cost, billed_list_cost, gap_pct\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_reconciliation\n",
+        "WHERE usage_date >= current_date() - INTERVAL 14 DAYS ORDER BY usage_date"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Corrected Trace Cost",
+      "layout": [
+        {
+          "widget": {
+            "name": "txt_banner",
+            "textbox_spec": "## Corrected Trace Cost — interim estimate\nMLflow trace cost is estimated at a list rate that does not match the customer's Azure North Europe pricing. This dashboard recomputes a corrected cost from a read-only overlay. **Interim estimate. Replace when MLflow trace cost sources from AI Gateway pricing / `system.ai_gateway.cost`.** Token-method rates are placeholders until real per-token rates are loaded into `trace_cost_rate_config`."
+          },
+          "position": { "x": 0, "y": 0, "width": 6, "height": 2 }
+        },
+        {
+          "widget": {
+            "name": "c_total_corrected",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_totals", "fields": [ { "name": "total_corrected", "expression": "`total_corrected`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "counter", "encodings": { "value": { "fieldName": "total_corrected", "displayName": "Total corrected cost (30d)" } } }
+          },
+          "position": { "x": 0, "y": 2, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "c_total_mlflow",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_totals", "fields": [ { "name": "total_mlflow", "expression": "`total_mlflow`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "counter", "encodings": { "value": { "fieldName": "total_mlflow", "displayName": "MLflow-reported cost (30d)" } } }
+          },
+          "position": { "x": 2, "y": 2, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "c_unmatched",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_unmatched", "fields": [ { "name": "unmatched_spans", "expression": "`unmatched_spans`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "counter", "encodings": { "value": { "fieldName": "unmatched_spans", "displayName": "Spans on default rate (rate_matched=false)" } } }
+          },
+          "position": { "x": 4, "y": 2, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "bar_by_day",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_by_day", "fields": [ { "name": "trace_date", "expression": "`trace_date`" }, { "name": "corrected_cost", "expression": "`corrected_cost`" }, { "name": "mlflow_cost", "expression": "`mlflow_cost`" } ], "disaggregated": false } } ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": { "fieldName": "trace_date", "scale": { "type": "temporal" }, "displayName": "Date" },
+                "y": { "fieldName": "corrected_cost", "scale": { "type": "quantitative" }, "displayName": "Corrected cost (USD)" }
+              }
+            }
+          },
+          "position": { "x": 0, "y": 5, "width": 3, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "bar_by_model",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_by_model", "fields": [ { "name": "model_key", "expression": "`model_key`" }, { "name": "corrected_cost", "expression": "`corrected_cost`" } ], "disaggregated": false } } ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": { "fieldName": "corrected_cost", "scale": { "type": "quantitative" }, "displayName": "Corrected cost (USD)" },
+                "y": { "fieldName": "model_key", "scale": { "type": "categorical" }, "displayName": "Model" }
+              }
+            }
+          },
+          "position": { "x": 3, "y": 5, "width": 3, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "line_recon",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_recon", "fields": [ { "name": "usage_date", "expression": "`usage_date`" }, { "name": "gap_pct", "expression": "`gap_pct`" } ], "disaggregated": false } } ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": { "fieldName": "usage_date", "scale": { "type": "temporal" }, "displayName": "Date" },
+                "y": { "fieldName": "gap_pct", "scale": { "type": "quantitative" }, "displayName": "Corrected vs billed gap (%)" }
+              }
+            }
+          },
+          "position": { "x": 0, "y": 11, "width": 6, "height": 5 }
+        },
+        {
+          "widget": {
+            "name": "tbl_top_traces",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_top_traces", "fields": [ { "name": "trace_id", "expression": "`trace_id`" }, { "name": "trace_date", "expression": "`trace_date`" }, { "name": "models", "expression": "`models`" }, { "name": "corrected_cost", "expression": "`corrected_cost`" }, { "name": "input_tokens", "expression": "`input_tokens`" }, { "name": "output_tokens", "expression": "`output_tokens`" }, { "name": "cache_read_tokens", "expression": "`cache_read_tokens`" }, { "name": "all_rates_matched", "expression": "`all_rates_matched`" } ], "disaggregated": false } } ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": { "columns": [
+                { "fieldName": "trace_id", "displayName": "trace_id" },
+                { "fieldName": "trace_date", "displayName": "date" },
+                { "fieldName": "models", "displayName": "models" },
+                { "fieldName": "corrected_cost", "displayName": "corrected_cost" },
+                { "fieldName": "input_tokens", "displayName": "input_tokens" },
+                { "fieldName": "output_tokens", "displayName": "output_tokens" },
+                { "fieldName": "cache_read_tokens", "displayName": "cache_read_tokens" },
+                { "fieldName": "all_rates_matched", "displayName": "all_rates_matched" }
+              ] },
+              "frame": { "showTitle": true, "title": "Top traces by corrected cost (30d)" }
+            }
+          },
+          "position": { "x": 0, "y": 16, "width": 6, "height": 7 }
+        }
+      ]
+    }
+  ]
+}
