@@ -1,0 +1,152 @@
+{
+  "datasets": [
+    {
+      "name": "ds_totals",
+      "displayName": "Trace totals 30d",
+      "queryLines": [
+        "SELECT round(sum(corrected_cost),2) AS total_corrected, count(*) AS traces\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_corrected\n",
+        "WHERE trace_date >= current_date() - INTERVAL 30 DAYS"
+      ]
+    },
+    {
+      "name": "ds_recon_totals",
+      "displayName": "Reconciliation totals 30d",
+      "queryLines": [
+        "SELECT round(sum(authoritative_usd),2) AS authoritative_usd,\n",
+        "       round(sum(attributed_usd),2) AS attributed_usd,\n",
+        "       round(100*sum(attributed_usd)/nullif(sum(authoritative_usd),0),1) AS attributed_pct\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_reconciliation\n",
+        "WHERE usage_date >= current_date() - INTERVAL 30 DAYS"
+      ]
+    },
+    {
+      "name": "ds_recon_day",
+      "displayName": "Reconciliation by day",
+      "queryLines": [
+        "SELECT usage_date, round(sum(authoritative_usd),2) AS authoritative_usd,\n",
+        "       round(sum(attributed_usd),2) AS attributed_usd\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_reconciliation\n",
+        "WHERE usage_date >= current_date() - INTERVAL 30 DAYS GROUP BY usage_date ORDER BY usage_date"
+      ]
+    },
+    {
+      "name": "ds_by_model",
+      "displayName": "Attributed cost by model 30d",
+      "queryLines": [
+        "SELECT model_key, cost_source, round(sum(request_cost),2) AS usd\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_request_cost\n",
+        "WHERE usage_date >= current_date() - INTERVAL 30 DAYS AND rate_matched\n",
+        "GROUP BY model_key, cost_source ORDER BY usd DESC LIMIT 20"
+      ]
+    },
+    {
+      "name": "ds_by_basis",
+      "displayName": "Cost by billing basis 30d",
+      "queryLines": [
+        "SELECT coalesce(billing_basis,'unmatched') AS billing_basis, round(sum(request_cost),2) AS usd\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_request_cost\n",
+        "WHERE usage_date >= current_date() - INTERVAL 30 DAYS GROUP BY 1 ORDER BY usd DESC"
+      ]
+    },
+    {
+      "name": "ds_rates",
+      "displayName": "Latest effective rates",
+      "queryLines": [
+        "SELECT model_key, cost_source, billing_basis, round(usd_per_token*1e6,2) AS usd_per_mtok\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_model_rate_daily\n",
+        "WHERE usage_date = (SELECT max(usage_date) FROM uaigw_fe.trace_cost_overlay.v_model_rate_daily)\n",
+        "ORDER BY usd_per_mtok DESC LIMIT 30"
+      ]
+    },
+    {
+      "name": "ds_top_traces",
+      "displayName": "Top traces 30d",
+      "queryLines": [
+        "SELECT trace_id, trace_date, models, round(corrected_cost,4) AS corrected_cost,\n",
+        "       input_tokens, output_tokens, all_rates_matched\n",
+        "FROM uaigw_fe.trace_cost_overlay.v_trace_cost_corrected\n",
+        "WHERE trace_date >= current_date() - INTERVAL 30 DAYS ORDER BY corrected_cost DESC LIMIT 50"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Corrected Trace Cost",
+      "layout": [
+        {
+          "widget": {
+            "name": "txt_banner",
+            "textbox_spec": "## Corrected Trace Cost — authoritative sources\nCost is derived from `system.billing.usage` x `system.billing.list_prices` (Databricks-hosted, region-correct, SCD2) and `system.ai_gateway.external_model_spend` (external models, already USD), allocated to traces by billable tokens. It **reconciles to billing**. `billing_basis = provisioned_or_sparse` means the per-token figure reflects reserved capacity, not a token list price. **Interim overlay; delete when MLflow trace cost sources platform pricing.**"
+          },
+          "position": { "x": 0, "y": 0, "width": 6, "height": 2 }
+        },
+        {
+          "widget": {
+            "name": "c_corrected",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_totals", "fields": [ { "name": "total_corrected", "expression": "`total_corrected`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "counter", "encodings": { "value": { "fieldName": "total_corrected", "displayName": "Corrected trace cost 30d (USD)" } } }
+          },
+          "position": { "x": 0, "y": 2, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "c_auth",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_recon_totals", "fields": [ { "name": "authoritative_usd", "expression": "`authoritative_usd`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "counter", "encodings": { "value": { "fieldName": "authoritative_usd", "displayName": "Authoritative billing USD 30d" } } }
+          },
+          "position": { "x": 2, "y": 2, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "c_pct",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_recon_totals", "fields": [ { "name": "attributed_pct", "expression": "`attributed_pct`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "counter", "encodings": { "value": { "fieldName": "attributed_pct", "displayName": "Attributed to traces (%)" } } }
+          },
+          "position": { "x": 4, "y": 2, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "line_recon",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_recon_day", "fields": [ { "name": "usage_date", "expression": "`usage_date`" }, { "name": "authoritative_usd", "expression": "`authoritative_usd`" }, { "name": "attributed_usd", "expression": "`attributed_usd`" } ], "disaggregated": false } } ],
+            "spec": { "version": 3, "widgetType": "line", "encodings": { "x": { "fieldName": "usage_date", "scale": { "type": "temporal" }, "displayName": "Date" }, "y": { "fieldName": "authoritative_usd", "scale": { "type": "quantitative" }, "displayName": "USD" } } }
+          },
+          "position": { "x": 0, "y": 5, "width": 3, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "bar_model",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_by_model", "fields": [ { "name": "model_key", "expression": "`model_key`" }, { "name": "usd", "expression": "`usd`" } ], "disaggregated": false } } ],
+            "spec": { "version": 3, "widgetType": "bar", "encodings": { "x": { "fieldName": "usd", "scale": { "type": "quantitative" }, "displayName": "USD" }, "y": { "fieldName": "model_key", "scale": { "type": "categorical" }, "displayName": "Model" } } }
+          },
+          "position": { "x": 3, "y": 5, "width": 3, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "bar_basis",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_by_basis", "fields": [ { "name": "billing_basis", "expression": "`billing_basis`" }, { "name": "usd", "expression": "`usd`" } ], "disaggregated": false } } ],
+            "spec": { "version": 3, "widgetType": "bar", "encodings": { "x": { "fieldName": "billing_basis", "scale": { "type": "categorical" }, "displayName": "Billing basis" }, "y": { "fieldName": "usd", "scale": { "type": "quantitative" }, "displayName": "USD" } } }
+          },
+          "position": { "x": 0, "y": 11, "width": 3, "height": 5 }
+        },
+        {
+          "widget": {
+            "name": "tbl_rates",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_rates", "fields": [ { "name": "model_key", "expression": "`model_key`" }, { "name": "cost_source", "expression": "`cost_source`" }, { "name": "billing_basis", "expression": "`billing_basis`" }, { "name": "usd_per_mtok", "expression": "`usd_per_mtok`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "table", "encodings": { "columns": [ { "fieldName": "model_key", "displayName": "model" }, { "fieldName": "cost_source", "displayName": "source" }, { "fieldName": "billing_basis", "displayName": "basis" }, { "fieldName": "usd_per_mtok", "displayName": "USD/Mtok" } ] }, "frame": { "showTitle": true, "title": "Latest effective rate by model" } }
+          },
+          "position": { "x": 3, "y": 11, "width": 3, "height": 5 }
+        },
+        {
+          "widget": {
+            "name": "tbl_top",
+            "queries": [ { "name": "main", "query": { "datasetName": "ds_top_traces", "fields": [ { "name": "trace_id", "expression": "`trace_id`" }, { "name": "trace_date", "expression": "`trace_date`" }, { "name": "models", "expression": "`models`" }, { "name": "corrected_cost", "expression": "`corrected_cost`" }, { "name": "input_tokens", "expression": "`input_tokens`" }, { "name": "output_tokens", "expression": "`output_tokens`" }, { "name": "all_rates_matched", "expression": "`all_rates_matched`" } ], "disaggregated": false } } ],
+            "spec": { "version": 2, "widgetType": "table", "encodings": { "columns": [ { "fieldName": "trace_id", "displayName": "trace_id" }, { "fieldName": "trace_date", "displayName": "date" }, { "fieldName": "models", "displayName": "models" }, { "fieldName": "corrected_cost", "displayName": "corrected_cost" }, { "fieldName": "input_tokens", "displayName": "in_tok" }, { "fieldName": "output_tokens", "displayName": "out_tok" }, { "fieldName": "all_rates_matched", "displayName": "rates_matched" } ] }, "frame": { "showTitle": true, "title": "Top traces by corrected cost" } }
+          },
+          "position": { "x": 0, "y": 16, "width": 6, "height": 7 }
+        }
+      ]
+    }
+  ]
+}

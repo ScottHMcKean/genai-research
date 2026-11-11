@@ -1,0 +1,62 @@
+bundle:
+  name: trace_cost_overlay
+
+# Interim, read-only corrected-trace-cost overlay.
+# Deploy:  databricks bundle deploy  -t dev --profile <PROFILE>
+# Run job: databricks bundle run materialize_trace_cost -t dev --profile <PROFILE>
+
+variables:
+  trace_catalog:
+    description: Catalog holding the MLflow trace tables (read-only).
+    default: uaigw_fe
+  trace_schema:
+    description: Schema holding the MLflow trace tables (read-only).
+    default: uaigw_schema
+  table_prefix:
+    description: Trace table prefix (locates <prefix>_otel_spans).
+    default: unity_gateway
+  output_catalog:
+    description: Catalog for the overlay's own objects.
+    default: uaigw_fe
+  output_schema:
+    description: Schema for the overlay's own objects.
+    default: trace_cost_overlay
+  pricing_mode:
+    description: effective | azure_list
+    default: effective
+  warehouse_id:
+    description: SQL warehouse backing the dashboard.
+    default: 515ab992db161c68
+
+resources:
+  jobs:
+    materialize_trace_cost:
+      name: "[trace-cost-overlay] materialize corrected trace cost"
+      tags:
+        project: trace_cost_overlay
+        lifecycle: interim
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"   # 06:00 daily
+        timezone_id: UTC
+        pause_status: UNPAUSED
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: materialize
+          notebook_task:
+            notebook_path: ./src/materialize_trace_cost.py
+            base_parameters:
+              output_catalog: ${var.output_catalog}
+              output_schema: ${var.output_schema}
+              lookback_hours: "48"
+          # No job_clusters block => runs on serverless compute.
+
+  dashboards:
+    trace_cost_overlay_dashboard:
+      display_name: "[trace-cost-overlay] Corrected Trace Cost (interim)"
+      file_path: ./dashboards/trace_cost_overlay.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+
+targets:
+  dev:
+    mode: development
+    default: true
